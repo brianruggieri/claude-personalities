@@ -1,0 +1,22 @@
+{
+	"last_updated": "2026-03-15",
+	"source": "https://platform.claude.com/docs/en/about-claude/pricing",
+	"models": {
+		"opus-4.6": {
+			"cache_read_per_mtok": 0.50,
+			"cache_miss_per_mtok": 5.00,
+			"output_per_mtok": 25.00
+		},
+		"sonnet-4.6": {
+			"cache_read_per_mtok": 0.30,
+			"cache_miss_per_mtok": 3.00,
+			"output_per_mtok": 15.00
+		},
+		"haiku-4.5": {
+			"cache_read_per_mtok": 0.10,
+			"cache_miss_per_mtok": 1.00,
+			"output_per_mtok": 5.00
+		}
+	},
+	"default_model": "opus-4.6"
+}
