@@ -72,6 +72,14 @@ Profiling:
   profile --detail <branch>        Token breakdown and cost estimate for one profile
   profile --compare <a> <b>        Side-by-side diff of two profiles
 
+Metrics:
+  snapshot                         Capture current session metrics for active profile
+  snapshot --all                   Capture metrics for all projects
+
+  Tip: Auto-capture with a SessionEnd hook in claude/settings.json:
+    "hooks": { "SessionEnd": [{ "type": "command",
+      "command": "~/git/claude_personalities/setup.sh snapshot --quiet" }] }
+
 Setup:
   backup          Back up current ~/.claude/ personality files
   import          Import personality files from ~/.claude/ into this repo
@@ -810,6 +818,31 @@ PYEOF
 		done <<< "$cap_names"
 	fi
 
+	# Session averages (if snapshot data exists)
+	local session_data
+	session_data="$(_session_averages)"
+	if [ -n "$session_data" ]; then
+		echo ""
+		echo "  Session Averages (from _metrics/sessions/)"
+		printf '  '; printf '─%.0s' {1..76}; echo ""
+		printf "  %-14s %8s  %9s  %12s  %12s\n" \
+			"Profile" "Sessions" "Avg Cost" "Avg Duration" "Avg Cache%"
+
+		while IFS= read -r line; do
+			[ -z "$line" ] && continue
+			read -r prof sessions avg_cost avg_dur avg_cache <<< "$line"
+			prof="$(echo "$prof" | tr -d "'")"
+			local dur_min=$(( ${avg_dur%.*} / 60 ))
+			local dur_sec=$(( ${avg_dur%.*} % 60 ))
+			local dur_fmt="${dur_min}m ${dur_sec}s"
+			local cache_pct
+			cache_pct="$(python3 -c "print(f'{float(${avg_cache}) * 100:.1f}%')")"
+
+			printf "  %-14s %8s  %9s  %12s  %12s\n" \
+				"$prof" "$sessions" "\$${avg_cost}" "$dur_fmt" "$cache_pct"
+		done <<< "$session_data"
+	fi
+
 	echo ""
 }
 
@@ -1036,6 +1069,185 @@ PYEOF
 	echo ""
 }
 
+# ─── Session Snapshots ────────────────────────────────────────────────────────
+
+# Capture session metrics from ~/.claude.json for the active profile.
+# Usage: cmd_snapshot [--all] [--quiet]
+cmd_snapshot() {
+	local capture_all=0
+	local quiet=0
+
+	while [ $# -gt 0 ]; do
+		case "$1" in
+			--all)   capture_all=1; shift ;;
+			--quiet) quiet=1; shift ;;
+			*)       shift ;;
+		esac
+	done
+
+	local profile
+	profile="$(git -C "$REPO_DIR" branch --show-current 2>/dev/null || echo "unknown")"
+
+	local claude_json="$HOME/.claude.json"
+	if [ ! -f "$claude_json" ]; then
+		[ "$quiet" -eq 0 ] && echo "No ~/.claude.json found. Run a Claude Code session first."
+		return 1
+	fi
+
+	local metrics_dir="$REPO_DIR/_metrics/sessions/$profile"
+	mkdir -p "$metrics_dir"
+
+	python3 - "$claude_json" "$profile" "$capture_all" "$quiet" "$PWD" "$metrics_dir" <<'PYEOF'
+import json, sys, os
+from datetime import datetime, timezone
+
+def safe_div(a, b):
+    return a / b if b != 0 else 0.0
+
+try:
+    claude_json_path = sys.argv[1]
+    profile = sys.argv[2]
+    capture_all = sys.argv[3] == '1'
+    quiet = sys.argv[4] == '1'
+    cwd = sys.argv[5]
+    metrics_dir = sys.argv[6]
+
+    with open(claude_json_path, 'r') as f:
+        data = json.load(f)
+
+    projects = data.get('projects', {})
+    if not projects:
+        if not quiet:
+            print('No project data in ~/.claude.json.')
+        sys.exit(0)
+
+    if capture_all:
+        targets = list(projects.keys())
+    else:
+        if cwd not in projects:
+            if not quiet:
+                print(f'No session data for {cwd} in ~/.claude.json.')
+                print('Use --all to capture all projects.')
+            sys.exit(0)
+        targets = [cwd]
+
+    timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    filename_ts = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
+    count = 0
+
+    for project_path in targets:
+        p = projects[project_path]
+
+        cost = p.get('lastCost', 0)
+        duration_ms = p.get('lastDuration', 0)
+        api_duration_ms = p.get('lastAPIDuration', 0)
+        input_tokens = p.get('lastTotalInputTokens', 0)
+        output_tokens = p.get('lastTotalOutputTokens', 0)
+        cache_creation = p.get('lastTotalCacheCreationInputTokens', 0)
+        cache_read = p.get('lastTotalCacheReadInputTokens', 0)
+        lines_added = p.get('lastLinesAdded', 0)
+        lines_removed = p.get('lastLinesRemoved', 0)
+        model_usage = p.get('lastModelUsage', {})
+
+        total_input = cache_read + cache_creation + input_tokens
+        cache_hit_rate = round(safe_div(cache_read, total_input), 3)
+
+        snapshot = {
+            'profile': profile,
+            'timestamp': timestamp,
+            'project': project_path,
+            'cost_usd': cost,
+            'duration_seconds': round(duration_ms / 1000),
+            'api_duration_seconds': round(api_duration_ms / 1000),
+            'total_input_tokens': input_tokens,
+            'total_output_tokens': output_tokens,
+            'cache_creation_tokens': cache_creation,
+            'cache_read_tokens': cache_read,
+            'cache_hit_rate': cache_hit_rate,
+            'lines_added': lines_added,
+            'lines_removed': lines_removed,
+            'model_usage': model_usage,
+        }
+
+        # Write snapshot file
+        if capture_all:
+            proj_name = os.path.basename(project_path.rstrip('/'))
+            out_path = os.path.join(metrics_dir, f'{filename_ts}-{proj_name}.json')
+        else:
+            out_path = os.path.join(metrics_dir, f'{filename_ts}.json')
+
+        with open(out_path, 'w') as f:
+            json.dump(snapshot, f, indent=2)
+            f.write('\n')
+
+        count += 1
+
+        if not quiet:
+            dur_min = duration_ms / 60000
+            print(f'Snapshot saved: {os.path.basename(out_path)}')
+            print(f'  Profile:    {profile}')
+            print(f'  Project:    {project_path}')
+            print(f'  Cost:       ${cost:.2f}')
+            print(f'  Duration:   {dur_min:.1f}m')
+            print(f'  Cache hit:  {cache_hit_rate * 100:.1f}%')
+            if count < len(targets):
+                print()
+
+    if not quiet and count > 1:
+        print(f'\n{count} snapshots saved.')
+
+except Exception as e:
+    if len(sys.argv) > 4 and sys.argv[4] != '1':
+        print(f'Snapshot failed: {e}')
+    sys.exit(0)
+PYEOF
+}
+
+# Compute session averages from _metrics/sessions/ data.
+# Outputs one line per profile: <profile> <sessions> <avg_cost> <avg_duration_s> <avg_cache_hit>
+_session_averages() {
+	local sessions_dir="$REPO_DIR/_metrics/sessions"
+	[ -d "$sessions_dir" ] || return 0
+
+	python3 - "$sessions_dir" <<'PYEOF'
+import json, os, sys, shlex
+
+try:
+    sessions_dir = sys.argv[1]
+
+    for profile_name in sorted(os.listdir(sessions_dir)):
+        profile_dir = os.path.join(sessions_dir, profile_name)
+        if not os.path.isdir(profile_dir):
+            continue
+
+        costs = []
+        durations = []
+        cache_hits = []
+
+        for fname in sorted(os.listdir(profile_dir)):
+            if not fname.endswith('.json'):
+                continue
+            fpath = os.path.join(profile_dir, fname)
+            try:
+                with open(fpath, 'r') as f:
+                    snap = json.load(f)
+                costs.append(snap.get('cost_usd', 0))
+                durations.append(snap.get('duration_seconds', 0))
+                cache_hits.append(snap.get('cache_hit_rate', 0))
+            except (json.JSONDecodeError, OSError):
+                continue
+
+        if costs:
+            avg_cost = sum(costs) / len(costs)
+            avg_dur = sum(durations) / len(durations)
+            avg_cache = sum(cache_hits) / len(cache_hits)
+            print(f'{shlex.quote(profile_name)} {len(costs)} {avg_cost:.2f} {avg_dur:.0f} {avg_cache:.3f}')
+
+except Exception:
+    pass
+PYEOF
+}
+
 # Main dispatch for profile command
 cmd_profile() {
 	local mode="table"
@@ -1094,6 +1306,7 @@ case "${1:-}" in
 	drift)        cmd_drift ;;
 	changelog)    cmd_changelog ;;
 	pin-version)  cmd_pin_version ;;
+	snapshot)     shift; cmd_snapshot "$@" ;;
 	profile)      shift; cmd_profile "$@" ;;
 	*)            usage ;;
 esac
