@@ -116,7 +116,7 @@ unlink_profile() {
 	done
 
 	# Items in ~/
-	for item in "${HOME_MANAGED_ITEMS[@]}"; do
+	for item in ${HOME_MANAGED_ITEMS[@]+"${HOME_MANAGED_ITEMS[@]}"}; do
 		local path="$HOME/$item"
 		if [ -L "$path" ]; then
 			local target
@@ -148,7 +148,7 @@ link_profile() {
 	done
 
 	# Items in ~/
-	for item in "${HOME_MANAGED_ITEMS[@]}"; do
+	for item in ${HOME_MANAGED_ITEMS[@]+"${HOME_MANAGED_ITEMS[@]}"}; do
 		local src="$HOME_PACKAGE_DIR/$item"
 		local dst="$HOME/$item"
 		[ -e "$src" ] || continue
@@ -252,7 +252,7 @@ cmd_backup() {
 
 	# Backup ~/ items
 	mkdir -p "$dest/_home"
-	for item in "${HOME_MANAGED_ITEMS[@]}"; do
+	for item in ${HOME_MANAGED_ITEMS[@]+"${HOME_MANAGED_ITEMS[@]}"}; do
 		local src="$HOME/$item"
 		if [ -e "$src" ] || [ -L "$src" ]; then
 			if [ -L "$src" ]; then
@@ -295,7 +295,7 @@ cmd_import() {
 	done
 
 	# Import ~/ items
-	for item in "${HOME_MANAGED_ITEMS[@]}"; do
+	for item in ${HOME_MANAGED_ITEMS[@]+"${HOME_MANAGED_ITEMS[@]}"}; do
 		local src="$HOME/$item"
 		local dst="$HOME_PACKAGE_DIR/$item"
 
@@ -348,7 +348,7 @@ cmd_status() {
 	echo ""
 	echo "~/ items:"
 
-	for item in "${HOME_MANAGED_ITEMS[@]}"; do
+	for item in ${HOME_MANAGED_ITEMS[@]+"${HOME_MANAGED_ITEMS[@]}"}; do
 		local path="$HOME/$item"
 		if [ -L "$path" ]; then
 			local target
