@@ -49,9 +49,7 @@ Only files that define agent behavior are tracked. Runtime state stays in `~/.cl
 | `mcp.json` | `~/.claude/` | User-level MCP config |
 | `statusline-command.sh` | `~/.claude/` | Custom statusline script |
 | `statusline-config.txt` | `~/.claude/` | Statusline display config |
-| `fetch-claude-usage.swift` | `~/.claude/` | Usage tracking script |
 | `run-project-hook.sh` | `~/.claude/` | Custom hook script |
-| `.claude.json` | `~/` | User-scoped MCP servers |
 
 **Runtime (untouched):** `projects/`, `history.jsonl`, `debug/`, `plans/`, `todos/`, `tasks/`, `teams/`, `sessions/`, `plugins/` (cache), and others.
 
@@ -83,7 +81,6 @@ git add -A && git commit -m "profile: base (imported from current config)"
 # 5. Remove the real files from ~/.claude/ (they're backed up + in git)
 # Remove each managed item that was imported:
 rm ~/.claude/CLAUDE.md ~/.claude/settings.json  # etc.
-rm ~/.claude.json
 
 # 6. Activate symlinks
 ./setup.sh use main
@@ -176,6 +173,5 @@ Items that exist in one profile but not another are handled correctly — they'r
 
 ## Known limitations
 
-- `~/.claude.json` may be recreated by Claude Code during a session (atomic write pattern). The symlink generally holds, but `doctor` will detect if it breaks.
 - Switch profiles between sessions, not during. Settings load at session start.
 - Plugin switching is enable/disable only. All plugins remain installed in the cache.
