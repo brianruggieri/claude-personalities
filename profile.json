@@ -1,7 +1,7 @@
 {
 	"name": "main",
 	"description": "Full-featured daily driver with design, testing, and development skills",
-	"author": "anonymous",
+	"author": "",
 	"category": "full-stack",
 	"tags": ["design", "testing", "browser-automation", "code-review", "tdd"],
 	"capabilities": [
