@@ -814,6 +814,31 @@ PYEOF
 		done <<< "$cap_names"
 	fi
 
+	# Session averages (if snapshot data exists)
+	local session_data
+	session_data="$(_session_averages)"
+	if [ -n "$session_data" ]; then
+		echo ""
+		echo "  Session Averages (from _metrics/sessions/)"
+		printf '  '; printf '─%.0s' {1..76}; echo ""
+		printf "  %-14s %8s  %9s  %12s  %12s\n" \
+			"Profile" "Sessions" "Avg Cost" "Avg Duration" "Avg Cache%"
+
+		while IFS= read -r line; do
+			[ -z "$line" ] && continue
+			read -r prof sessions avg_cost avg_dur avg_cache <<< "$line"
+			prof="$(echo "$prof" | tr -d "'")"
+			local dur_min=$(( ${avg_dur%.*} / 60 ))
+			local dur_sec=$(( ${avg_dur%.*} % 60 ))
+			local dur_fmt="${dur_min}m ${dur_sec}s"
+			local cache_pct
+			cache_pct="$(python3 -c "print(f'{float(${avg_cache}) * 100:.1f}%')")"
+
+			printf "  %-14s %8s  %9s  %12s  %12s\n" \
+				"$prof" "$sessions" "\$${avg_cost}" "$dur_fmt" "$cache_pct"
+		done <<< "$session_data"
+	fi
+
 	echo ""
 }
 
@@ -1171,6 +1196,51 @@ except Exception as e:
     if len(sys.argv) > 4 and sys.argv[4] != '1':
         print(f'Snapshot failed: {e}')
     sys.exit(0)
+PYEOF
+}
+
+# Compute session averages from _metrics/sessions/ data.
+# Outputs one line per profile: <profile> <sessions> <avg_cost> <avg_duration_s> <avg_cache_hit>
+_session_averages() {
+	local sessions_dir="$REPO_DIR/_metrics/sessions"
+	[ -d "$sessions_dir" ] || return 0
+
+	python3 - "$sessions_dir" <<'PYEOF'
+import json, os, sys, shlex
+
+try:
+    sessions_dir = sys.argv[1]
+
+    for profile_name in sorted(os.listdir(sessions_dir)):
+        profile_dir = os.path.join(sessions_dir, profile_name)
+        if not os.path.isdir(profile_dir):
+            continue
+
+        costs = []
+        durations = []
+        cache_hits = []
+
+        for fname in sorted(os.listdir(profile_dir)):
+            if not fname.endswith('.json'):
+                continue
+            fpath = os.path.join(profile_dir, fname)
+            try:
+                with open(fpath, 'r') as f:
+                    snap = json.load(f)
+                costs.append(snap.get('cost_usd', 0))
+                durations.append(snap.get('duration_seconds', 0))
+                cache_hits.append(snap.get('cache_hit_rate', 0))
+            except (json.JSONDecodeError, OSError):
+                continue
+
+        if costs:
+            avg_cost = sum(costs) / len(costs)
+            avg_dur = sum(durations) / len(durations)
+            avg_cache = sum(cache_hits) / len(cache_hits)
+            print(f'{shlex.quote(profile_name)} {len(costs)} {avg_cost:.2f} {avg_dur:.0f} {avg_cache:.3f}')
+
+except Exception:
+    pass
 PYEOF
 }
 
