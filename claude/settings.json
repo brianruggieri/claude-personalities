@@ -31,7 +31,18 @@
       "Bash(tmux:*)",
       "WebSearch"
     ],
-    "deny": [],
+    "deny": [
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.gnupg/**)",
+      "Read(~/.git-credentials)",
+      "Read(~/Library/Keychains/**)",
+      "Bash(rm -rf *)",
+      "Bash(rm -fr *)",
+      "Bash(sudo *)",
+      "Bash(git push --force*)",
+      "Bash(git reset --hard*)"
+    ],
     "defaultMode": "acceptEdits"
   },
   "hooks": {},
