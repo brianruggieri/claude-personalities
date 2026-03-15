@@ -3,6 +3,10 @@
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "permissions": {
     "allow": [
       "Bash(npx:*)",
@@ -62,6 +66,12 @@
       }
     ]
   },
+  "worktree": {
+    "symlinkDirectories": [
+      "node_modules",
+      ".cache"
+    ]
+  },
   "statusLine": {
     "type": "command",
     "command": "bash $HOME/.claude/statusline-command.sh"
@@ -85,13 +95,6 @@
     }
   },
   "effortLevel": "high",
-  "skipDangerousModePermissionPrompt": true,
-  "attribution": {
-    "commit": "",
-    "pr": ""
-  },
-  "worktree": {
-    "symlinkDirectories": ["node_modules", ".cache"]
-  },
-  "showThinkingSummaries": true
+  "showThinkingSummaries": true,
+  "skipDangerousModePermissionPrompt": true
 }
