@@ -6,5 +6,12 @@
   "difficulty": "basic",
   "timeout": 180,
   "scoring": "binary",
-  "metrics": ["correctness", "cost", "duration", "token_efficiency"]
+  "metrics": ["correctness", "cost", "duration", "token_efficiency"],
+  "expected_complexity": {
+    "max_files": 2,
+    "max_classes": 1,
+    "max_functions": 3,
+    "max_lines": 50,
+    "disallow_patterns": ["Factory", "AbstractBase"]
+  }
 }

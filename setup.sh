@@ -1312,6 +1312,27 @@ _benchmark_run_task() {
 		verify_output="$("$task_dir/verify.sh" "$tmpdir" 2>&1)" && passed=true || passed=false
 	fi
 
+	# Run Tier 3 analyzers (always-on, zero cost)
+	local analyzers_dir="$REPO_DIR/benchmarks/analyzers"
+	local analyzer_output=""
+	if [ -d "$analyzers_dir" ]; then
+		# Security smells
+		analyzer_output+="$(python3 "$analyzers_dir/security_smells.py" "$tmpdir" 2>/dev/null || true)"$'\n'
+		# Naming quality (Python tasks only)
+		analyzer_output+="$(python3 "$analyzers_dir/naming_quality.py" "$tmpdir" 2>/dev/null || true)"$'\n'
+		# Over-engineering
+		analyzer_output+="$(python3 "$analyzers_dir/overengineering.py" "$tmpdir" "$task_dir/task.json" 2>/dev/null || true)"$'\n'
+		# Regression check (only for fix-python-bug)
+		if [ "$task_name" = "fix-python-bug" ] && [ -d "$task_dir/fixture" ]; then
+			analyzer_output+="$(python3 "$analyzers_dir/regression_check.py" "$tmpdir" "$task_dir/fixture" 2>/dev/null || true)"$'\n'
+		fi
+		# LLM-as-judge (uses subscription via claude -p)
+		if command -v claude &>/dev/null; then
+			analyzer_output+="$(python3 "$analyzers_dir/llm_judge.py" "$tmpdir" "$task_name" 2>/dev/null || true)"$'\n'
+		fi
+	fi
+	verify_output="$verify_output"$'\n'"$analyzer_output"
+
 	# Extract metrics from verify output
 	local quality_score
 	quality_score="$(echo "$verify_output" | grep -oE 'SCORE:[0-9]+' | tail -1 | cut -d: -f2)"
@@ -1345,6 +1366,55 @@ _benchmark_run_task() {
 	funcs_over_50="$(echo "$verify_output" | grep -oE 'FUNCTIONS_OVER_50:[0-9]+' | cut -d: -f2)"
 	[ -z "$funcs_over_50" ] && funcs_over_50=0
 
+	# Tier 3 analyzer metrics
+	local security_smells
+	security_smells="$(echo "$verify_output" | grep -oE 'SECURITY_SMELLS:[0-9]+' | cut -d: -f2)"
+	[ -z "$security_smells" ] && security_smells=0
+
+	local naming_score
+	naming_score="$(echo "$verify_output" | grep -oE 'NAMING_SCORE:[0-9]+' | cut -d: -f2)"
+	[ -z "$naming_score" ] && naming_score=100
+
+	local naming_generic
+	naming_generic="$(echo "$verify_output" | grep -oE 'NAMING_GENERIC_COUNT:[0-9]+' | cut -d: -f2)"
+	[ -z "$naming_generic" ] && naming_generic=0
+
+	local overengineering_score
+	overengineering_score="$(echo "$verify_output" | grep -oE 'OVERENGINEERING_SCORE:[0-9]+' | cut -d: -f2)"
+	[ -z "$overengineering_score" ] && overengineering_score=100
+
+	local regression_score
+	regression_score="$(echo "$verify_output" | grep -oE 'REGRESSION_SCORE:[0-9]+' | cut -d: -f2)"
+	[ -z "$regression_score" ] && regression_score=100
+
+	local regression_broken
+	regression_broken="$(echo "$verify_output" | grep -oE 'REGRESSION_BROKEN:[0-9]+' | cut -d: -f2)"
+	[ -z "$regression_broken" ] && regression_broken=0
+
+	local judge_score
+	judge_score="$(echo "$verify_output" | grep -oE 'JUDGE_SCORE:[0-9]+' | cut -d: -f2)"
+	[ -z "$judge_score" ] && judge_score=0
+
+	local judge_readability
+	judge_readability="$(echo "$verify_output" | grep -oE 'JUDGE_READABILITY:[0-9]+' | cut -d: -f2)"
+	[ -z "$judge_readability" ] && judge_readability=0
+
+	local judge_naming
+	judge_naming="$(echo "$verify_output" | grep -oE 'JUDGE_NAMING:[0-9]+' | cut -d: -f2)"
+	[ -z "$judge_naming" ] && judge_naming=0
+
+	local judge_error_handling
+	judge_error_handling="$(echo "$verify_output" | grep -oE 'JUDGE_ERROR_HANDLING:[0-9]+' | cut -d: -f2)"
+	[ -z "$judge_error_handling" ] && judge_error_handling=0
+
+	local judge_idiomatic
+	judge_idiomatic="$(echo "$verify_output" | grep -oE 'JUDGE_IDIOMATIC:[0-9]+' | cut -d: -f2)"
+	[ -z "$judge_idiomatic" ] && judge_idiomatic=0
+
+	local judge_abstraction
+	judge_abstraction="$(echo "$verify_output" | grep -oE 'JUDGE_ABSTRACTION:[0-9]+' | cut -d: -f2)"
+	[ -z "$judge_abstraction" ] && judge_abstraction=0
+
 	# Extract metrics from claude JSON output and write result
 	local results_dir="$REPO_DIR/_metrics/benchmarks/$profile/$task_name"
 	mkdir -p "$results_dir"
@@ -1354,7 +1424,11 @@ _benchmark_run_task() {
 	python3 - "$claude_output_file" "$profile" "$task_name" \
 		"$results_dir/${timestamp}.json" "$passed" "$quality_score" \
 		"$files_extra" "$lines_generated" "$lint_issues" \
-		"$complexity_avg" "$complexity_max" "$max_func_length" "$funcs_over_50" <<'PYEOF'
+		"$complexity_avg" "$complexity_max" "$max_func_length" "$funcs_over_50" \
+		"$security_smells" "$naming_score" "$naming_generic" \
+		"$overengineering_score" "$regression_score" "$regression_broken" \
+		"$judge_score" "$judge_readability" "$judge_naming" \
+		"$judge_error_handling" "$judge_idiomatic" "$judge_abstraction" <<'PYEOF'
 import json, sys
 from datetime import datetime, timezone
 
@@ -1375,6 +1449,18 @@ try:
     complexity_max = int(sys.argv[11])
     max_func_length = int(sys.argv[12])
     funcs_over_50 = int(sys.argv[13])
+    security_smells = int(sys.argv[14])
+    naming_score = int(sys.argv[15])
+    naming_generic = int(sys.argv[16])
+    overengineering_score = int(sys.argv[17])
+    regression_score = int(sys.argv[18])
+    regression_broken = int(sys.argv[19])
+    judge_score = int(sys.argv[20])
+    judge_readability = int(sys.argv[21])
+    judge_naming = int(sys.argv[22])
+    judge_error_handling = int(sys.argv[23])
+    judge_idiomatic = int(sys.argv[24])
+    judge_abstraction = int(sys.argv[25])
 
     cost = 0
     duration = 0
@@ -1426,6 +1512,18 @@ try:
         'complexity_max': complexity_max,
         'max_function_length': max_func_length,
         'functions_over_50': funcs_over_50,
+        'security_smells': security_smells,
+        'naming_score': naming_score,
+        'naming_generic_count': naming_generic,
+        'overengineering_score': overengineering_score,
+        'regression_score': regression_score,
+        'regression_broken': regression_broken,
+        'judge_score': judge_score,
+        'judge_readability': judge_readability,
+        'judge_naming': judge_naming,
+        'judge_error_handling': judge_error_handling,
+        'judge_idiomatic': judge_idiomatic,
+        'judge_abstraction': judge_abstraction,
     }
 
     with open(out_path, 'w') as f:
@@ -1745,6 +1843,10 @@ try:
             'cache': sum(r.get('cache_efficiency', 0) for r in latest) * 100 / total,
             'lint': sum(r.get('lint_issues', 0) for r in latest) / total,
             'complexity': sum(r.get('complexity_avg', 0) for r in latest) / total,
+            'naming': sum(r.get('naming_score', 100) for r in latest) / total,
+            'overeng': sum(r.get('overengineering_score', 100) for r in latest) / total,
+            'security': sum(r.get('security_smells', 0) for r in latest) / total,
+            'judge': sum(r.get('judge_score', 0) for r in latest) / total,
         }
 
     active_profiles = [p for p in profiles if p in profile_avgs]
@@ -1753,15 +1855,18 @@ try:
     metrics_config = [
         ('pass_rate', False),    # higher = better
         ('quality', False),      # higher = better
-        ('cost', True),          # lower = better
-        ('duration', True),      # lower = better
-        ('tokens', True),        # lower = better
-        ('cache', False),        # higher = better
+        ('judge', False),        # higher = better
+        ('naming', False),       # higher = better
+        ('overeng', False),      # higher = better
+        ('security', True),      # lower = better
         ('lint', True),          # lower = better
         ('complexity', True),    # lower = better
+        ('tokens', True),        # lower = better
+        ('duration', True),      # lower = better
     ]
-    radar_labels = ['Pass Rate', 'Quality', 'Cost Efficiency', 'Speed',
-                    'Token Efficiency', 'Cache Efficiency', 'Code Cleanliness', 'Simplicity']
+    radar_labels = ['Pass Rate', 'Quality', 'Judge Score', 'Naming',
+                    'Simplicity', 'Security', 'Code Cleanliness', 'Low Complexity',
+                    'Token Efficiency', 'Speed']
 
     for metric, invert in metrics_config:
         raw_values = [profile_avgs[p][metric] for p in active_profiles]
