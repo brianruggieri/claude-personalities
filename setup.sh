@@ -84,6 +84,7 @@ Benchmarking:
   benchmark                        Run all benchmark tasks against current profile
   benchmark --task <name>          Run a specific benchmark task
   benchmark --report               Show benchmark results across profiles
+  benchmark --report --html        Generate interactive HTML dashboard
 
 Setup:
   backup          Back up current ~/.claude/ personality files
@@ -1311,6 +1312,110 @@ _benchmark_run_task() {
 		verify_output="$("$task_dir/verify.sh" "$tmpdir" 2>&1)" && passed=true || passed=false
 	fi
 
+	# Run Tier 3 analyzers (always-on, zero cost)
+	local analyzers_dir="$REPO_DIR/benchmarks/analyzers"
+	local analyzer_output=""
+	if [ -d "$analyzers_dir" ]; then
+		# Security smells
+		analyzer_output+="$(python3 "$analyzers_dir/security_smells.py" "$tmpdir" 2>/dev/null || true)"$'\n'
+		# Naming quality (Python tasks only)
+		analyzer_output+="$(python3 "$analyzers_dir/naming_quality.py" "$tmpdir" 2>/dev/null || true)"$'\n'
+		# Over-engineering
+		analyzer_output+="$(python3 "$analyzers_dir/overengineering.py" "$tmpdir" "$task_dir/task.json" 2>/dev/null || true)"$'\n'
+		# Regression check (only for fix-python-bug)
+		if [ "$task_name" = "fix-python-bug" ] && [ -d "$task_dir/fixture" ]; then
+			analyzer_output+="$(python3 "$analyzers_dir/regression_check.py" "$tmpdir" "$task_dir/fixture" 2>/dev/null || true)"$'\n'
+		fi
+		# LLM-as-judge (uses subscription via claude -p)
+		# Disabled during initial runs to avoid slowdown — enable with BENCHMARK_JUDGE=1
+		if [ "${BENCHMARK_JUDGE:-0}" = "1" ] && command -v claude &>/dev/null; then
+			analyzer_output+="$(python3 "$analyzers_dir/llm_judge.py" "$tmpdir" "$task_name" 2>/dev/null || true)"$'\n'
+		fi
+	fi
+	verify_output="$verify_output"$'\n'"$analyzer_output"
+
+	# Extract metrics from verify output
+	local quality_score
+	quality_score="$(echo "$verify_output" | grep -oE 'SCORE:[0-9]+' | tail -1 | cut -d: -f2)"
+	[ -z "$quality_score" ] && { [ "$passed" = "true" ] && quality_score=100 || quality_score=0; }
+
+	local files_extra
+	files_extra="$(echo "$verify_output" | grep -oE 'FILES_EXTRA:[0-9]+' | cut -d: -f2)"
+	[ -z "$files_extra" ] && files_extra=0
+
+	local lines_generated
+	lines_generated="$(echo "$verify_output" | grep -oE 'LINES_GENERATED:[0-9]+' | cut -d: -f2)"
+	[ -z "$lines_generated" ] && lines_generated=0
+
+	local lint_issues
+	lint_issues="$(echo "$verify_output" | grep -oE 'LINT_ISSUES:[0-9]+' | cut -d: -f2)"
+	[ -z "$lint_issues" ] && lint_issues=0
+
+	local complexity_avg
+	complexity_avg="$(echo "$verify_output" | grep -oE 'COMPLEXITY_AVG:[0-9.]+' | cut -d: -f2)"
+	[ -z "$complexity_avg" ] && complexity_avg=0
+
+	local complexity_max
+	complexity_max="$(echo "$verify_output" | grep -oE 'COMPLEXITY_MAX:[0-9]+' | cut -d: -f2)"
+	[ -z "$complexity_max" ] && complexity_max=0
+
+	local max_func_length
+	max_func_length="$(echo "$verify_output" | grep -oE 'MAX_FUNCTION_LENGTH:[0-9]+' | cut -d: -f2)"
+	[ -z "$max_func_length" ] && max_func_length=0
+
+	local funcs_over_50
+	funcs_over_50="$(echo "$verify_output" | grep -oE 'FUNCTIONS_OVER_50:[0-9]+' | cut -d: -f2)"
+	[ -z "$funcs_over_50" ] && funcs_over_50=0
+
+	# Tier 3 analyzer metrics
+	local security_smells
+	security_smells="$(echo "$verify_output" | grep -oE 'SECURITY_SMELLS:[0-9]+' | cut -d: -f2)"
+	[ -z "$security_smells" ] && security_smells=0
+
+	local naming_score
+	naming_score="$(echo "$verify_output" | grep -oE 'NAMING_SCORE:[0-9]+' | cut -d: -f2)"
+	[ -z "$naming_score" ] && naming_score=100
+
+	local naming_generic
+	naming_generic="$(echo "$verify_output" | grep -oE 'NAMING_GENERIC_COUNT:[0-9]+' | cut -d: -f2)"
+	[ -z "$naming_generic" ] && naming_generic=0
+
+	local overengineering_score
+	overengineering_score="$(echo "$verify_output" | grep -oE 'OVERENGINEERING_SCORE:[0-9]+' | cut -d: -f2)"
+	[ -z "$overengineering_score" ] && overengineering_score=100
+
+	local regression_score
+	regression_score="$(echo "$verify_output" | grep -oE 'REGRESSION_SCORE:[0-9]+' | cut -d: -f2)"
+	[ -z "$regression_score" ] && regression_score=100
+
+	local regression_broken
+	regression_broken="$(echo "$verify_output" | grep -oE 'REGRESSION_BROKEN:[0-9]+' | cut -d: -f2)"
+	[ -z "$regression_broken" ] && regression_broken=0
+
+	local judge_score
+	judge_score="$(echo "$verify_output" | grep -oE 'JUDGE_SCORE:[0-9]+' | cut -d: -f2)"
+	[ -z "$judge_score" ] && judge_score=0
+
+	local judge_readability
+	judge_readability="$(echo "$verify_output" | grep -oE 'JUDGE_READABILITY:[0-9]+' | cut -d: -f2)"
+	[ -z "$judge_readability" ] && judge_readability=0
+
+	local judge_naming
+	judge_naming="$(echo "$verify_output" | grep -oE 'JUDGE_NAMING:[0-9]+' | cut -d: -f2)"
+	[ -z "$judge_naming" ] && judge_naming=0
+
+	local judge_error_handling
+	judge_error_handling="$(echo "$verify_output" | grep -oE 'JUDGE_ERROR_HANDLING:[0-9]+' | cut -d: -f2)"
+	[ -z "$judge_error_handling" ] && judge_error_handling=0
+
+	local judge_idiomatic
+	judge_idiomatic="$(echo "$verify_output" | grep -oE 'JUDGE_IDIOMATIC:[0-9]+' | cut -d: -f2)"
+	[ -z "$judge_idiomatic" ] && judge_idiomatic=0
+
+	local judge_abstraction
+	judge_abstraction="$(echo "$verify_output" | grep -oE 'JUDGE_ABSTRACTION:[0-9]+' | cut -d: -f2)"
+	[ -z "$judge_abstraction" ] && judge_abstraction=0
+
 	# Extract metrics from claude JSON output and write result
 	local results_dir="$REPO_DIR/_metrics/benchmarks/$profile/$task_name"
 	mkdir -p "$results_dir"
@@ -1318,9 +1423,18 @@ _benchmark_run_task() {
 	timestamp="$(date -u +%Y%m%d-%H%M%S)"
 
 	python3 - "$claude_output_file" "$profile" "$task_name" \
-		"$results_dir/${timestamp}.json" "$passed" <<'PYEOF'
+		"$results_dir/${timestamp}.json" "$passed" "$quality_score" \
+		"$files_extra" "$lines_generated" "$lint_issues" \
+		"$complexity_avg" "$complexity_max" "$max_func_length" "$funcs_over_50" \
+		"$security_smells" "$naming_score" "$naming_generic" \
+		"$overengineering_score" "$regression_score" "$regression_broken" \
+		"$judge_score" "$judge_readability" "$judge_naming" \
+		"$judge_error_handling" "$judge_idiomatic" "$judge_abstraction" <<'PYEOF'
 import json, sys
 from datetime import datetime, timezone
+
+def safe_div(a, b):
+    return a / b if b != 0 else 0.0
 
 try:
     claude_output_path = sys.argv[1]
@@ -1328,6 +1442,26 @@ try:
     task_name = sys.argv[3]
     out_path = sys.argv[4]
     passed = sys.argv[5] == 'true'
+    quality_score = int(sys.argv[6])
+    files_extra = int(sys.argv[7])
+    lines_generated = int(sys.argv[8])
+    lint_issues = int(sys.argv[9])
+    complexity_avg = float(sys.argv[10])
+    complexity_max = int(sys.argv[11])
+    max_func_length = int(sys.argv[12])
+    funcs_over_50 = int(sys.argv[13])
+    security_smells = int(sys.argv[14])
+    naming_score = int(sys.argv[15])
+    naming_generic = int(sys.argv[16])
+    overengineering_score = int(sys.argv[17])
+    regression_score = int(sys.argv[18])
+    regression_broken = int(sys.argv[19])
+    judge_score = int(sys.argv[20])
+    judge_readability = int(sys.argv[21])
+    judge_naming = int(sys.argv[22])
+    judge_error_handling = int(sys.argv[23])
+    judge_idiomatic = int(sys.argv[24])
+    judge_abstraction = int(sys.argv[25])
 
     cost = 0
     duration = 0
@@ -1353,19 +1487,44 @@ try:
     except Exception:
         pass
 
+    total_in = cache_read + cache_creation + input_tokens
+    cache_efficiency = round(safe_div(cache_read, total_in), 3)
+
     result = {
         'profile': profile,
         'task': task_name,
         'timestamp': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
         'passed': passed,
         'score': 1 if passed else 0,
+        'quality_score': quality_score,
         'cost_usd': cost,
         'duration_seconds': duration,
         'total_input_tokens': input_tokens,
         'total_output_tokens': output_tokens,
+        'output_tokens_raw': output_tokens,
         'cache_read_tokens': cache_read,
         'cache_creation_tokens': cache_creation,
+        'cache_efficiency': cache_efficiency,
         'model': model,
+        'files_extra': files_extra,
+        'lines_generated': lines_generated,
+        'lint_issues': lint_issues,
+        'complexity_avg': complexity_avg,
+        'complexity_max': complexity_max,
+        'max_function_length': max_func_length,
+        'functions_over_50': funcs_over_50,
+        'security_smells': security_smells,
+        'naming_score': naming_score,
+        'naming_generic_count': naming_generic,
+        'overengineering_score': overengineering_score,
+        'regression_score': regression_score,
+        'regression_broken': regression_broken,
+        'judge_score': judge_score,
+        'judge_readability': judge_readability,
+        'judge_naming': judge_naming,
+        'judge_error_handling': judge_error_handling,
+        'judge_idiomatic': judge_idiomatic,
+        'judge_abstraction': judge_abstraction,
     }
 
     with open(out_path, 'w') as f:
@@ -1373,17 +1532,18 @@ try:
         f.write('\n')
 
 except Exception as e:
-    # Write a fallback result so the runner always has something to report
     try:
         fallback = {
             'profile': sys.argv[2], 'task': sys.argv[3],
             'timestamp': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
             'passed': sys.argv[5] == 'true',
             'score': 1 if sys.argv[5] == 'true' else 0,
+            'quality_score': int(sys.argv[6]) if len(sys.argv) > 6 else 0,
             'cost_usd': 0, 'duration_seconds': 0,
             'total_input_tokens': 0, 'total_output_tokens': 0,
+            'output_tokens_raw': 0,
             'cache_read_tokens': 0, 'cache_creation_tokens': 0,
-            'model': 'unknown', 'error': str(e),
+            'cache_efficiency': 0, 'model': 'unknown', 'error': str(e),
         }
         with open(sys.argv[4], 'w') as f:
             json.dump(fallback, f, indent=2)
@@ -1576,11 +1736,474 @@ except Exception as e:
 PYEOF
 }
 
+# Generate HTML dashboard with Chart.js radar charts, cost bars, trend lines, and results table.
+_benchmark_html_report() {
+	local benchmarks_dir="$REPO_DIR/_metrics/benchmarks"
+	local tasks_dir="$REPO_DIR/benchmarks/tasks"
+	local out_file="$REPO_DIR/_metrics/dashboard.html"
+
+	if [ ! -d "$benchmarks_dir" ]; then
+		echo "No benchmark data in _metrics/benchmarks/"
+		return 1
+	fi
+
+	mkdir -p "$REPO_DIR/_metrics"
+
+	python3 - "$benchmarks_dir" "$tasks_dir" "$out_file" <<'PYEOF'
+import json, os, sys, html
+
+benchmarks_dir = sys.argv[1]
+tasks_dir = sys.argv[2]
+out_file = sys.argv[3]
+
+COLORS = {
+    'blank': {'bg': 'rgba(59, 130, 246, 0.2)', 'border': 'rgb(59, 130, 246)'},
+    'main': {'bg': 'rgba(16, 185, 129, 0.2)', 'border': 'rgb(16, 185, 129)'},
+    'opinionated': {'bg': 'rgba(245, 158, 11, 0.2)', 'border': 'rgb(245, 158, 11)'},
+}
+FALLBACK_COLORS = [
+    {'bg': 'rgba(139, 92, 246, 0.2)', 'border': 'rgb(139, 92, 246)'},
+    {'bg': 'rgba(239, 68, 68, 0.2)', 'border': 'rgb(239, 68, 68)'},
+    {'bg': 'rgba(236, 72, 153, 0.2)', 'border': 'rgb(236, 72, 153)'},
+]
+
+def get_color(profile, idx):
+    if profile in COLORS:
+        return COLORS[profile]
+    return FALLBACK_COLORS[idx % len(FALLBACK_COLORS)]
+
+try:
+    # Discover tasks and profiles
+    task_names = sorted([
+        d for d in os.listdir(tasks_dir)
+        if os.path.isfile(os.path.join(tasks_dir, d, 'task.json'))
+    ]) if os.path.isdir(tasks_dir) else []
+
+    profiles = sorted([
+        d for d in os.listdir(benchmarks_dir)
+        if os.path.isdir(os.path.join(benchmarks_dir, d))
+    ])
+
+    # Load all results
+    all_results = {}  # {profile: {task: [results]}}
+    for p in profiles:
+        all_results[p] = {}
+        for t in task_names:
+            task_dir = os.path.join(benchmarks_dir, p, t)
+            if not os.path.isdir(task_dir):
+                continue
+            results = []
+            for fname in sorted(os.listdir(task_dir)):
+                if not fname.endswith('.json'):
+                    continue
+                try:
+                    with open(os.path.join(task_dir, fname)) as f:
+                        results.append(json.load(f))
+                except Exception:
+                    continue
+            if results:
+                all_results[p][t] = results
+
+    # Compute radar data per profile (8 axes, all 0-100, higher = better)
+    # Uses min-max scaling: best = 95, worst = 30, equal = 95
+    radar_data = {}
+    profile_avgs = {}  # {profile: {metric: avg_value}}
+
+    FLOOR = 30  # worst score on radar
+    CEIL = 95   # best score on radar
+
+    def minmax_scale(values, invert=False):
+        """Scale values to FLOOR-CEIL range. If invert, lower raw = higher score."""
+        if not values:
+            return []
+        mn, mx = min(values), max(values)
+        if mn == mx:
+            return [CEIL] * len(values)
+        scaled = []
+        for v in values:
+            if invert:
+                norm = (mx - v) / (mx - mn)
+            else:
+                norm = (v - mn) / (mx - mn)
+            scaled.append(round(FLOOR + norm * (CEIL - FLOOR), 1))
+        return scaled
+
+    # First pass: compute per-profile averages
+    for p in profiles:
+        tasks_data = all_results.get(p, {})
+        if not tasks_data:
+            continue
+        latest = [runs[-1] for runs in tasks_data.values()]
+        total = len(latest)
+        profile_avgs[p] = {
+            'pass_rate': sum(1 for r in latest if r.get('passed', False)) * 100 / total,
+            'quality': sum(r.get('quality_score', 100 if r.get('passed') else 0) for r in latest) / total,
+            'cost': sum(r.get('cost_usd', 0) for r in latest) / total,
+            'duration': sum(r.get('duration_seconds', 0) for r in latest) / total,
+            'tokens': sum(r.get('output_tokens_raw', r.get('total_output_tokens', 0)) for r in latest) / total,
+            'cache': sum(r.get('cache_efficiency', 0) for r in latest) * 100 / total,
+            'lint': sum(r.get('lint_issues', 0) for r in latest) / total,
+            'complexity': sum(r.get('complexity_avg', 0) for r in latest) / total,
+            'naming': sum(r.get('naming_score', 100) for r in latest) / total,
+            'overeng': sum(r.get('overengineering_score', 100) for r in latest) / total,
+            'security': sum(r.get('security_smells', 0) for r in latest) / total,
+            'judge': sum(r.get('judge_score', 0) for r in latest) / total,
+        }
+
+    active_profiles = [p for p in profiles if p in profile_avgs]
+
+    # Scale each metric across profiles
+    metrics_config = [
+        ('pass_rate', False),    # higher = better
+        ('quality', False),      # higher = better
+        ('judge', False),        # higher = better
+        ('naming', False),       # higher = better
+        ('overeng', False),      # higher = better
+        ('security', True),      # lower = better
+        ('lint', True),          # lower = better
+        ('complexity', True),    # lower = better
+        ('tokens', True),        # lower = better
+        ('duration', True),      # lower = better
+    ]
+    radar_labels = ['Pass Rate', 'Quality', 'Judge Score', 'Naming',
+                    'Simplicity', 'Security', 'Code Cleanliness', 'Low Complexity',
+                    'Token Efficiency', 'Speed']
+
+    for metric, invert in metrics_config:
+        raw_values = [profile_avgs[p][metric] for p in active_profiles]
+        scaled = minmax_scale(raw_values, invert=invert)
+        for i, p in enumerate(active_profiles):
+            if p not in radar_data:
+                radar_data[p] = {}
+            radar_data[p][metric] = scaled[i]
+
+    # Tokens per task per profile (for bar chart — more meaningful than cost for subscription)
+    token_data = {}  # {profile: {task: {input, output, cache_creation, cache_read}}}
+    for p in profiles:
+        token_data[p] = {}
+        for t in task_names:
+            runs = all_results.get(p, {}).get(t, [])
+            if runs:
+                r = runs[-1]
+                token_data[p][t] = {
+                    'input': r.get('total_input_tokens', 0),
+                    'output': r.get('output_tokens_raw', r.get('total_output_tokens', 0)),
+                    'cache_creation': r.get('cache_creation_tokens', 0),
+                    'cache_read': r.get('cache_read_tokens', 0),
+                }
+
+    # Trend data (all runs over time)
+    trend_data = {}  # {profile: [{timestamp, cost, quality}]}
+    has_trends = False
+    for p in profiles:
+        runs_list = []
+        for t, runs in all_results.get(p, {}).items():
+            for r in runs:
+                runs_list.append(r)
+        if len(runs_list) > len(task_names):
+            has_trends = True
+        runs_list.sort(key=lambda x: x.get('timestamp', ''))
+        trend_data[p] = runs_list
+
+    # Build results table data
+    table_rows = []
+    for p in profiles:
+        for t in task_names:
+            runs = all_results.get(p, {}).get(t, [])
+            if runs:
+                r = runs[-1]
+                table_rows.append({
+                    'profile': p,
+                    'task': t,
+                    'passed': r.get('passed', False),
+                    'quality_score': r.get('quality_score', 100 if r.get('passed') else 0),
+                    'cost': r.get('cost_usd', 0),
+                    'duration': r.get('duration_seconds', 0),
+                    'output_tokens': r.get('output_tokens_raw', r.get('total_output_tokens', 0)),
+                    'cache_efficiency': r.get('cache_efficiency', 0),
+                    'lint_issues': r.get('lint_issues', 0),
+                    'complexity': r.get('complexity_avg', 0),
+                    'files_extra': r.get('files_extra', 0),
+                    'lines_generated': r.get('lines_generated', 0),
+                })
+
+    # Generate HTML
+    radar_datasets_js = []
+    metric_keys = [m for m, _ in metrics_config]
+    for i, p in enumerate(active_profiles):
+        c = get_color(p, i)
+        d = radar_data[p]
+        vals = [d.get(k, 50) for k in metric_keys]
+        radar_datasets_js.append(f"""{{
+            label: '{html.escape(p)}',
+            data: {json.dumps(vals)},
+            backgroundColor: '{c["bg"]}',
+            borderColor: '{c["border"]}',
+            borderWidth: 2,
+            pointBackgroundColor: '{c["border"]}'
+        }}""")
+
+    # Output tokens per task (grouped bar — one bar per profile)
+    output_token_datasets_js = []
+    for i, p in enumerate(profiles):
+        c = get_color(p, i)
+        vals = [token_data.get(p, {}).get(t, {}).get('output', 0) for t in task_names]
+        output_token_datasets_js.append(f"""{{
+            label: '{html.escape(p)}',
+            data: {json.dumps(vals)},
+            backgroundColor: '{c["border"]}',
+            borderRadius: 4
+        }}""")
+
+    # Total tokens per profile (stacked bar showing composition)
+    token_categories = ['Input', 'Output', 'Cache Creation', 'Cache Read']
+    token_cat_colors = ['#f87171', '#fbbf24', '#34d399', '#60a5fa']
+    token_stacked_datasets = []
+    for ci, (cat, cat_key) in enumerate(zip(token_categories, ['input', 'output', 'cache_creation', 'cache_read'])):
+        vals = []
+        for p in profiles:
+            total = sum(td.get(cat_key, 0) for td in token_data.get(p, {}).values())
+            vals.append(total)
+        token_stacked_datasets.append(f"""{{
+            label: '{cat}',
+            data: {json.dumps(vals)},
+            backgroundColor: '{token_cat_colors[ci]}'
+        }}""")
+
+    trend_datasets_js = ""
+    if has_trends:
+        trend_cost_ds = []
+        trend_quality_ds = []
+        for i, p in enumerate(profiles):
+            c = get_color(p, i)
+            runs = trend_data.get(p, [])
+            cost_points = json.dumps([{'x': r['timestamp'], 'y': r.get('cost_usd', 0)} for r in runs])
+            quality_points = json.dumps([{'x': r['timestamp'], 'y': r.get('quality_score', 0)} for r in runs])
+            trend_cost_ds.append(f"""{{
+                label: '{html.escape(p)}',
+                data: {cost_points},
+                borderColor: '{c["border"]}',
+                backgroundColor: '{c["bg"]}',
+                tension: 0.3, fill: false
+            }}""")
+            trend_quality_ds.append(f"""{{
+                label: '{html.escape(p)}',
+                data: {quality_points},
+                borderColor: '{c["border"]}',
+                backgroundColor: '{c["bg"]}',
+                tension: 0.3, fill: false
+            }}""")
+        trend_datasets_js = f"""
+        new Chart(document.getElementById('trendCost'), {{
+            type: 'line',
+            data: {{ datasets: [{','.join(trend_cost_ds)}] }},
+            options: {{
+                responsive: true,
+                plugins: {{ title: {{ display: true, text: 'Cost Over Time', font: {{ size: 16 }} }} }},
+                scales: {{
+                    x: {{ type: 'time', time: {{ unit: 'day' }}, title: {{ display: true, text: 'Date' }} }},
+                    y: {{ title: {{ display: true, text: 'Cost (USD)' }}, beginAtZero: true }}
+                }}
+            }}
+        }});
+        new Chart(document.getElementById('trendQuality'), {{
+            type: 'line',
+            data: {{ datasets: [{','.join(trend_quality_ds)}] }},
+            options: {{
+                responsive: true,
+                plugins: {{ title: {{ display: true, text: 'Quality Score Over Time', font: {{ size: 16 }} }} }},
+                scales: {{
+                    x: {{ type: 'time', time: {{ unit: 'day' }}, title: {{ display: true, text: 'Date' }} }},
+                    y: {{ title: {{ display: true, text: 'Quality Score' }}, min: 0, max: 100 }}
+                }}
+            }}
+        }});
+        """
+
+    table_html = ""
+    for row in table_rows:
+        c = get_color(row['profile'], profiles.index(row['profile']))
+        badge = '<span class="badge pass">PASS</span>' if row['passed'] else '<span class="badge fail">FAIL</span>'
+        lint_badge = f'<span class="badge pass">{row["lint_issues"]}</span>' if row['lint_issues'] == 0 else f'<span class="badge fail">{row["lint_issues"]}</span>'
+        extra_badge = f'<span class="badge pass">{row["files_extra"]}</span>' if row['files_extra'] == 0 else f'<span class="badge fail">{row["files_extra"]}</span>'
+        table_html += f"""<tr>
+            <td><span class="dot" style="background:{c['border']}"></span>{html.escape(row['profile'])}</td>
+            <td>{html.escape(row['task'])}</td>
+            <td>{badge}</td>
+            <td>{row['quality_score']}</td>
+            <td>${row['cost']:.4f}</td>
+            <td>{row['duration']}s</td>
+            <td>{row['output_tokens']:,}</td>
+            <td>{lint_badge}</td>
+            <td>{row['complexity']:.1f}</td>
+            <td>{extra_badge}</td>
+            <td>{row['lines_generated']}</td>
+        </tr>"""
+
+    trend_html = ""
+    if has_trends:
+        trend_html = """
+        <div class="section">
+            <h2>Trends</h2>
+            <div class="chart-row">
+                <div class="chart-container"><canvas id="trendCost"></canvas></div>
+                <div class="chart-container"><canvas id="trendQuality"></canvas></div>
+            </div>
+        </div>"""
+
+    trend_adapter = ""
+    if has_trends:
+        trend_adapter = '<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>'
+
+    page = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Personalities — Benchmark Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+{trend_adapter}
+<style>
+  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; padding: 2rem; }}
+  h1 {{ font-size: 1.8rem; margin-bottom: 0.5rem; color: #f8fafc; }}
+  h2 {{ font-size: 1.3rem; margin-bottom: 1rem; color: #94a3b8; }}
+  .subtitle {{ color: #64748b; margin-bottom: 2rem; }}
+  .section {{ background: #1e293b; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }}
+  .chart-row {{ display: flex; gap: 1.5rem; flex-wrap: wrap; }}
+  .chart-container {{ flex: 1; min-width: 300px; max-width: 600px; }}
+  .radar-container {{ flex: 1; min-width: 350px; max-width: 500px; aspect-ratio: 1; }}
+  table {{ width: 100%; border-collapse: collapse; }}
+  th {{ text-align: left; padding: 0.75rem; color: #94a3b8; border-bottom: 1px solid #334155; font-weight: 500; }}
+  td {{ padding: 0.75rem; border-bottom: 1px solid #1e293b; }}
+  tr:hover {{ background: #1e293b; }}
+  .badge {{ padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }}
+  .badge.pass {{ background: #065f46; color: #6ee7b7; }}
+  .badge.fail {{ background: #7f1d1d; color: #fca5a5; }}
+  .dot {{ display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }}
+  .generated {{ text-align: center; color: #475569; margin-top: 2rem; font-size: 0.85rem; }}
+</style>
+</head>
+<body>
+<h1>Claude Personalities — Benchmark Dashboard</h1>
+<p class="subtitle">Generated from _metrics/benchmarks/ &middot; {len(profiles)} profiles &middot; {len(task_names)} tasks</p>
+
+<div class="section">
+    <h2>Profile Radar — 6-Axis Comparison</h2>
+    <div class="chart-row">
+        <div class="radar-container"><canvas id="radar"></canvas></div>
+    </div>
+</div>
+
+<div class="section">
+    <h2>Token Usage</h2>
+    <div class="chart-row">
+        <div class="chart-container" style="max-width:600px"><canvas id="outputTokenBar"></canvas></div>
+        <div class="chart-container" style="max-width:600px"><canvas id="tokenBreakdown"></canvas></div>
+    </div>
+</div>
+
+{trend_html}
+
+<div class="section">
+    <h2>Results Detail</h2>
+    <table>
+        <thead><tr><th>Profile</th><th>Task</th><th>Status</th><th>Quality</th><th>Cost</th><th>Duration</th><th>Tokens</th><th>Lint</th><th>Complexity</th><th>Extra Files</th><th>Lines</th></tr></thead>
+        <tbody>{table_html}</tbody>
+    </table>
+</div>
+
+<p class="generated">Generated by ./setup.sh benchmark --report --html</p>
+
+<script>
+new Chart(document.getElementById('radar'), {{
+    type: 'radar',
+    data: {{
+        labels: {json.dumps(radar_labels)},
+        datasets: [{','.join(radar_datasets_js)}]
+    }},
+    options: {{
+        responsive: true,
+        maintainAspectRatio: true,
+        scales: {{
+            r: {{
+                min: 20, max: 100,
+                ticks: {{ stepSize: 10, color: '#64748b', backdropColor: 'transparent' }},
+                grid: {{ color: '#334155' }},
+                angleLines: {{ color: '#334155' }},
+                pointLabels: {{ color: '#94a3b8', font: {{ size: 13 }} }}
+            }}
+        }},
+        plugins: {{ legend: {{ labels: {{ color: '#e2e8f0' }} }} }}
+    }}
+}});
+
+new Chart(document.getElementById('outputTokenBar'), {{
+    type: 'bar',
+    data: {{
+        labels: {json.dumps(task_names)},
+        datasets: [{','.join(output_token_datasets_js)}]
+    }},
+    options: {{
+        responsive: true,
+        plugins: {{
+            legend: {{ labels: {{ color: '#e2e8f0' }} }},
+            title: {{ display: true, text: 'Output Tokens per Task', font: {{ size: 14 }}, color: '#94a3b8' }}
+        }},
+        scales: {{
+            x: {{ ticks: {{ color: '#94a3b8' }}, grid: {{ color: '#1e293b' }} }},
+            y: {{ ticks: {{ color: '#94a3b8' }}, grid: {{ color: '#334155' }}, title: {{ display: true, text: 'Tokens', color: '#94a3b8' }} }}
+        }}
+    }}
+}});
+new Chart(document.getElementById('tokenBreakdown'), {{
+    type: 'bar',
+    data: {{
+        labels: {json.dumps(profiles)},
+        datasets: [{','.join(token_stacked_datasets)}]
+    }},
+    options: {{
+        responsive: true,
+        plugins: {{
+            legend: {{ labels: {{ color: '#e2e8f0' }} }},
+            title: {{ display: true, text: 'Total Token Breakdown by Profile', font: {{ size: 14 }}, color: '#94a3b8' }}
+        }},
+        scales: {{
+            x: {{ stacked: true, ticks: {{ color: '#94a3b8' }}, grid: {{ color: '#1e293b' }} }},
+            y: {{ stacked: true, ticks: {{ color: '#94a3b8' }}, grid: {{ color: '#334155' }}, title: {{ display: true, text: 'Tokens', color: '#94a3b8' }} }}
+        }}
+    }}
+}});
+
+{trend_datasets_js}
+</script>
+</body>
+</html>"""
+
+    with open(out_file, 'w') as f:
+        f.write(page)
+
+    print(f'Dashboard written to {out_file}')
+
+except Exception as e:
+    print(f'Dashboard generation failed: {e}')
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+PYEOF
+
+	# Open in default browser
+	if [ -f "$out_file" ]; then
+		open "$out_file" 2>/dev/null || xdg-open "$out_file" 2>/dev/null || echo "Open $out_file in your browser."
+	fi
+}
+
 # Main benchmark command.
-# Usage: cmd_benchmark [--task <name>] [--report]
+# Usage: cmd_benchmark [--task <name>] [--report] [--html]
 cmd_benchmark() {
 	local mode="run"
 	local single_task=""
+	local html_flag=0
 
 	while [ $# -gt 0 ]; do
 		case "$1" in
@@ -1596,14 +2219,28 @@ cmd_benchmark() {
 				mode="report"
 				shift
 				;;
+			--html)
+				html_flag=1
+				shift
+				;;
 			*)
 				shift
 				;;
 		esac
 	done
 
+	if [ "$html_flag" -eq 1 ] && [ "$mode" != "report" ]; then
+		echo "usage: ./setup.sh benchmark --report --html"
+		echo "--html requires --report"
+		return 1
+	fi
+
 	if [ "$mode" = "report" ]; then
-		_benchmark_report
+		if [ "$html_flag" -eq 1 ]; then
+			_benchmark_html_report
+		else
+			_benchmark_report
+		fi
 		return
 	fi
 
@@ -1620,6 +2257,16 @@ cmd_benchmark() {
 	if ! command -v claude &>/dev/null; then
 		echo "claude CLI not found. Install Claude Code first."
 		return 1
+	fi
+
+	# Warn if running inside a Claude Code session (nested claude -p may hang)
+	if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] || [ -n "${CLAUDE_SESSION_ID:-}" ]; then
+		echo ""
+		echo "  ⚠ Running inside a Claude Code session."
+		echo "  Benchmarks use 'claude -p' which may conflict with the active session."
+		echo "  For reliable results, run from a regular terminal:"
+		echo "    ./setup.sh benchmark"
+		echo ""
 	fi
 
 	echo ""
