@@ -1371,11 +1371,11 @@ _benchmark_run_task() {
 	[ -z "$lint_issues" ] && lint_issues=0
 
 	local complexity_avg
-	complexity_avg="$(echo "$verify_output" | grep -oE 'COMPLEXITY_AVG:[0-9.]+' | cut -d: -f2 || true)"
+	complexity_avg="$(echo "$verify_output" | grep -oE 'COMPLEXITY_AVG:[0-9.]+' | head -1 | cut -d: -f2 || true)"
 	[ -z "$complexity_avg" ] && complexity_avg=0
 
 	local complexity_max
-	complexity_max="$(echo "$verify_output" | grep -oE 'COMPLEXITY_MAX:[0-9]+' | cut -d: -f2 || true)"
+	complexity_max="$(echo "$verify_output" | grep -oE 'COMPLEXITY_MAX:[0-9]+' | head -1 | cut -d: -f2 || true)"
 	[ -z "$complexity_max" ] && complexity_max=0
 
 	local max_func_length
