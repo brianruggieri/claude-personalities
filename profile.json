@@ -1,0 +1,8 @@
+{
+	"name": "blank",
+	"description": "Clean slate — machine environment only, no plugins, no preferences",
+	"author": "anonymous",
+	"category": "minimal",
+	"tags": ["minimal", "clean", "baseline"],
+	"capabilities": []
+}

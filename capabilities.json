@@ -1,0 +1,59 @@
+{
+	"frontend-design": {
+		"description": "Create and refine web UI components and pages",
+		"provided_by": [
+			{ "plugin": "frontend-design" },
+			{ "plugin": "impeccable" }
+		],
+		"benchmark_task": "create-react-component"
+	},
+	"tdd-workflow": {
+		"description": "Red-green-refactor test-driven development",
+		"provided_by": [
+			{ "plugin": "superpowers", "skill": "test-driven-development" }
+		],
+		"benchmark_task": "write-unit-tests"
+	},
+	"code-review": {
+		"description": "Automated code review for pull requests",
+		"provided_by": [
+			{ "plugin": "code-review" }
+		],
+		"benchmark_task": "review-code-diff"
+	},
+	"browser-testing": {
+		"description": "Headless browser automation for QA and testing",
+		"provided_by": [
+			{ "plugin": "playwright" }
+		],
+		"benchmark_task": null
+	},
+	"api-docs-lookup": {
+		"description": "Up-to-date library documentation lookup",
+		"provided_by": [
+			{ "plugin": "context7" }
+		],
+		"benchmark_task": null
+	},
+	"typescript-intelligence": {
+		"description": "TypeScript/JavaScript language server for code intelligence",
+		"provided_by": [
+			{ "plugin": "typescript-lsp" }
+		],
+		"benchmark_task": null
+	},
+	"design-polish": {
+		"description": "Design quality review, polish, and normalization",
+		"provided_by": [
+			{ "plugin": "impeccable" }
+		],
+		"benchmark_task": null
+	},
+	"autonomous-loops": {
+		"description": "Continuous iterative development loops",
+		"provided_by": [
+			{ "plugin": "ralph-loop" }
+		],
+		"benchmark_task": null
+	}
+}
