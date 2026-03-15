@@ -5,7 +5,7 @@ Switchable Claude Code personality profiles via git branches + symlinks.
 ## Repo Structure
 
 - `claude/` — mirrors `~/.claude/`. Contents are symlinked into `~/.claude/` when a profile is active.
-- `home/` — mirrors `~/`. Contents are symlinked into `~/` when a profile is active.
+- `home/` — mirrors `~/`. Contents (if any) are symlinked into `~/` when a profile is active. Currently empty — `home/.claude.json` was removed for security (PII/runtime state).
 - `setup.sh` — all profile management commands (zero external dependencies).
 - `docs/superpowers/specs/` — design spec for the profile system.
 - `.claude/context-*.md` — context documents for specific workstreams.
@@ -19,7 +19,7 @@ Each git branch is a personality profile. Switch with `./setup.sh use <branch>`.
 |--------|---------|
 | `main` | Base daily driver — full config, 8 plugins, gstack skills |
 | `blank` | Clean slate — machine env only, no plugins, no preferences |
-| `opinionated` | In development — strong defaults and guardrails layered on base |
+| `opinionated` | Strict engineering opinions — TDD, code quality thresholds, 3 enforcement layers |
 
 ## Working Rules
 
@@ -39,7 +39,7 @@ Each git branch is a personality profile. Switch with `./setup.sh use <branch>`.
 | `claude/settings.local.json` | Personal overrides |
 | `claude/MEMORY.md` | Persistent memory per profile |
 | `claude/skills/` | User-level skills (exa-search, gstack suite) |
-| `home/.claude.json` | User-scoped MCP servers, runtime state |
+| `claude/hooks/` | PreToolUse hook scripts (opinionated profile) |
 | `setup.sh` | Profile management engine |
 
 ## Plugin Management

@@ -45,7 +45,7 @@ git checkout main
 
 Verify: `git branch --show-current` shows `main`.
 
-Note: `git stash pop` after all work is complete if you need to return to the previous state. The stash contains any uncommitted changes from the opinionated branch (likely just `home/.claude.json`).
+Note: `git stash pop` after all work is complete if you need to return to the previous state.
 
 - [ ] **Step 2: Create capabilities.json**
 

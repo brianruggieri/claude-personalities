@@ -21,13 +21,11 @@ MANAGED_ITEMS=(
 	"mcp.json"
 	"statusline-command.sh"
 	"statusline-config.txt"
-	"fetch-claude-usage.swift"
 	"run-project-hook.sh"
 )
 
 # Files in ~/ (not ~/.claude/) that define personality
 HOME_MANAGED_ITEMS=(
-	".claude.json"
 )
 
 # Runtime/ephemeral items — never personality, never managed
