@@ -1322,6 +1322,14 @@ _benchmark_run_task() {
 		analyzer_output+="$(python3 "$analyzers_dir/naming_quality.py" "$tmpdir" 2>/dev/null || true)"$'\n'
 		# Over-engineering
 		analyzer_output+="$(python3 "$analyzers_dir/overengineering.py" "$tmpdir" "$task_dir/task.json" 2>/dev/null || true)"$'\n'
+		# Cognitive complexity
+		analyzer_output+="$(python3 "$analyzers_dir/cognitive_complexity.py" "$tmpdir" 2>/dev/null || true)"$'\n'
+		# Halstead metrics + maintainability index
+		analyzer_output+="$(python3 "$analyzers_dir/halstead.py" "$tmpdir" 2>/dev/null || true)"$'\n'
+		# Duplicate block detection
+		analyzer_output+="$(python3 "$analyzers_dir/duplicate_blocks.py" "$tmpdir" 2>/dev/null || true)"$'\n'
+		# Personality compliance
+		analyzer_output+="$(python3 "$analyzers_dir/personality_compliance.py" "$tmpdir" "$profile" 2>/dev/null || true)"$'\n'
 		# Regression check (only for fix-python-bug)
 		if [ "$task_name" = "fix-python-bug" ] && [ -d "$task_dir/fixture" ]; then
 			analyzer_output+="$(python3 "$analyzers_dir/regression_check.py" "$tmpdir" "$task_dir/fixture" 2>/dev/null || true)"$'\n'
@@ -1416,6 +1424,39 @@ _benchmark_run_task() {
 	judge_abstraction="$(echo "$verify_output" | grep -oE 'JUDGE_ABSTRACTION:[0-9]+' | cut -d: -f2 || true)"
 	[ -z "$judge_abstraction" ] && judge_abstraction=0
 
+	# New Tier 3+ analyzer metrics
+	local cognitive_complexity_avg
+	cognitive_complexity_avg="$(echo "$verify_output" | grep -oE 'COGNITIVE_COMPLEXITY_AVG:[0-9.]+' | cut -d: -f2 || true)"
+	[ -z "$cognitive_complexity_avg" ] && cognitive_complexity_avg=0
+
+	local cognitive_complexity_max
+	cognitive_complexity_max="$(echo "$verify_output" | grep -oE 'COGNITIVE_COMPLEXITY_MAX:[0-9]+' | cut -d: -f2 || true)"
+	[ -z "$cognitive_complexity_max" ] && cognitive_complexity_max=0
+
+	local halstead_volume
+	halstead_volume="$(echo "$verify_output" | grep -oE 'HALSTEAD_VOLUME:[0-9.]+' | cut -d: -f2 || true)"
+	[ -z "$halstead_volume" ] && halstead_volume=0
+
+	local maintainability_index
+	maintainability_index="$(echo "$verify_output" | grep -oE 'MAINTAINABILITY_INDEX:[0-9.]+' | cut -d: -f2 || true)"
+	[ -z "$maintainability_index" ] && maintainability_index=0
+
+	local duplicate_blocks
+	duplicate_blocks="$(echo "$verify_output" | grep -oE 'DUPLICATE_BLOCKS:[0-9]+' | cut -d: -f2 || true)"
+	[ -z "$duplicate_blocks" ] && duplicate_blocks=0
+
+	local duplicate_score
+	duplicate_score="$(echo "$verify_output" | grep -oE 'DUPLICATE_SCORE:[0-9]+' | cut -d: -f2 || true)"
+	[ -z "$duplicate_score" ] && duplicate_score=100
+
+	local personality_compliance
+	personality_compliance="$(echo "$verify_output" | grep -oE 'PERSONALITY_COMPLIANCE:[0-9]+' | cut -d: -f2 || true)"
+	[ -z "$personality_compliance" ] && personality_compliance=100
+
+	local personality_violations
+	personality_violations="$(echo "$verify_output" | grep -oE 'PERSONALITY_VIOLATIONS:[0-9]+' | cut -d: -f2 || true)"
+	[ -z "$personality_violations" ] && personality_violations=0
+
 	# Extract metrics from claude JSON output and write result
 	local results_dir="$REPO_DIR/_metrics/benchmarks/$profile/$task_name"
 	mkdir -p "$results_dir"
@@ -1429,7 +1470,11 @@ _benchmark_run_task() {
 		"$security_smells" "$naming_score" "$naming_generic" \
 		"$overengineering_score" "$regression_score" "$regression_broken" \
 		"$judge_score" "$judge_readability" "$judge_naming" \
-		"$judge_error_handling" "$judge_idiomatic" "$judge_abstraction" <<'PYEOF'
+		"$judge_error_handling" "$judge_idiomatic" "$judge_abstraction" \
+		"$cognitive_complexity_avg" "$cognitive_complexity_max" \
+		"$halstead_volume" "$maintainability_index" \
+		"$duplicate_blocks" "$duplicate_score" \
+		"$personality_compliance" "$personality_violations" <<'PYEOF'
 import json, sys
 from datetime import datetime, timezone
 
@@ -1462,6 +1507,14 @@ try:
     judge_error_handling = int(sys.argv[23])
     judge_idiomatic = int(sys.argv[24])
     judge_abstraction = int(sys.argv[25])
+    cognitive_complexity_avg = float(sys.argv[26])
+    cognitive_complexity_max = int(sys.argv[27])
+    halstead_volume = float(sys.argv[28])
+    maintainability_index = float(sys.argv[29])
+    duplicate_blocks = int(sys.argv[30])
+    duplicate_score = int(sys.argv[31])
+    personality_compliance = int(sys.argv[32])
+    personality_violations = int(sys.argv[33])
 
     cost = 0
     duration = 0
@@ -1525,6 +1578,14 @@ try:
         'judge_error_handling': judge_error_handling,
         'judge_idiomatic': judge_idiomatic,
         'judge_abstraction': judge_abstraction,
+        'cognitive_complexity_avg': cognitive_complexity_avg,
+        'cognitive_complexity_max': cognitive_complexity_max,
+        'halstead_volume': halstead_volume,
+        'maintainability_index': maintainability_index,
+        'duplicate_blocks': duplicate_blocks,
+        'duplicate_score': duplicate_score,
+        'personality_compliance': personality_compliance,
+        'personality_violations': personality_violations,
     }
 
     with open(out_path, 'w') as f:
@@ -1848,25 +1909,32 @@ try:
             'overeng': sum(r.get('overengineering_score', 100) for r in latest) / total,
             'security': sum(r.get('security_smells', 0) for r in latest) / total,
             'judge': sum(r.get('judge_score', 0) for r in latest) / total,
+            'maintainability': sum(r.get('maintainability_index', 50) for r in latest) / total,
+            'duplicates': sum(r.get('duplicate_score', 100) for r in latest) / total,
+            'personality': sum(r.get('personality_compliance', 100) for r in latest) / total,
+            'cognitive': sum(r.get('cognitive_complexity_avg', 0) for r in latest) / total,
         }
 
     active_profiles = [p for p in profiles if p in profile_avgs]
 
     # Scale each metric across profiles
     metrics_config = [
-        ('pass_rate', False),    # higher = better
-        ('quality', False),      # higher = better
-        ('judge', False),        # higher = better
-        ('naming', False),       # higher = better
-        ('overeng', False),      # higher = better
-        ('security', True),      # lower = better
-        ('lint', True),          # lower = better
-        ('complexity', True),    # lower = better
-        ('tokens', True),        # lower = better
-        ('duration', True),      # lower = better
+        ('pass_rate', False),        # higher = better
+        ('quality', False),          # higher = better
+        ('personality', False),      # higher = better
+        ('maintainability', False),  # higher = better
+        ('naming', False),           # higher = better
+        ('overeng', False),          # higher = better
+        ('duplicates', False),       # higher = better
+        ('security', True),          # lower = better
+        ('lint', True),              # lower = better
+        ('cognitive', True),         # lower = better
+        ('tokens', True),            # lower = better
+        ('duration', True),          # lower = better
     ]
-    radar_labels = ['Pass Rate', 'Quality', 'Judge Score', 'Naming',
-                    'Simplicity', 'Security', 'Code Cleanliness', 'Low Complexity',
+    radar_labels = ['Pass Rate', 'Quality', 'Personality Compliance', 'Maintainability',
+                    'Naming', 'Simplicity', 'DRY Code',
+                    'Security', 'Code Cleanliness', 'Low Complexity',
                     'Token Efficiency', 'Speed']
 
     for metric, invert in metrics_config:
