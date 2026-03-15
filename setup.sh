@@ -84,6 +84,7 @@ Benchmarking:
   benchmark                        Run all benchmark tasks against current profile
   benchmark --task <name>          Run a specific benchmark task
   benchmark --report               Show benchmark results across profiles
+  benchmark --report --html        Generate interactive HTML dashboard
 
 Setup:
   backup          Back up current ~/.claude/ personality files
@@ -1594,11 +1595,409 @@ except Exception as e:
 PYEOF
 }
 
+# Generate HTML dashboard with Chart.js radar charts, cost bars, trend lines, and results table.
+_benchmark_html_report() {
+	local benchmarks_dir="$REPO_DIR/_metrics/benchmarks"
+	local tasks_dir="$REPO_DIR/benchmarks/tasks"
+	local out_file="$REPO_DIR/_metrics/dashboard.html"
+
+	if [ ! -d "$benchmarks_dir" ]; then
+		echo "No benchmark data in _metrics/benchmarks/"
+		return 1
+	fi
+
+	mkdir -p "$REPO_DIR/_metrics"
+
+	python3 - "$benchmarks_dir" "$tasks_dir" "$out_file" <<'PYEOF'
+import json, os, sys, html
+
+benchmarks_dir = sys.argv[1]
+tasks_dir = sys.argv[2]
+out_file = sys.argv[3]
+
+COLORS = {
+    'blank': {'bg': 'rgba(59, 130, 246, 0.2)', 'border': 'rgb(59, 130, 246)'},
+    'main': {'bg': 'rgba(16, 185, 129, 0.2)', 'border': 'rgb(16, 185, 129)'},
+    'opinionated': {'bg': 'rgba(245, 158, 11, 0.2)', 'border': 'rgb(245, 158, 11)'},
+}
+FALLBACK_COLORS = [
+    {'bg': 'rgba(139, 92, 246, 0.2)', 'border': 'rgb(139, 92, 246)'},
+    {'bg': 'rgba(239, 68, 68, 0.2)', 'border': 'rgb(239, 68, 68)'},
+    {'bg': 'rgba(236, 72, 153, 0.2)', 'border': 'rgb(236, 72, 153)'},
+]
+
+def get_color(profile, idx):
+    if profile in COLORS:
+        return COLORS[profile]
+    return FALLBACK_COLORS[idx % len(FALLBACK_COLORS)]
+
+try:
+    # Discover tasks and profiles
+    task_names = sorted([
+        d for d in os.listdir(tasks_dir)
+        if os.path.isfile(os.path.join(tasks_dir, d, 'task.json'))
+    ]) if os.path.isdir(tasks_dir) else []
+
+    profiles = sorted([
+        d for d in os.listdir(benchmarks_dir)
+        if os.path.isdir(os.path.join(benchmarks_dir, d))
+    ])
+
+    # Load all results
+    all_results = {}  # {profile: {task: [results]}}
+    for p in profiles:
+        all_results[p] = {}
+        for t in task_names:
+            task_dir = os.path.join(benchmarks_dir, p, t)
+            if not os.path.isdir(task_dir):
+                continue
+            results = []
+            for fname in sorted(os.listdir(task_dir)):
+                if not fname.endswith('.json'):
+                    continue
+                try:
+                    with open(os.path.join(task_dir, fname)) as f:
+                        results.append(json.load(f))
+                except Exception:
+                    continue
+            if results:
+                all_results[p][t] = results
+
+    # Compute radar data per profile (6 axes, all 0-100, higher = better)
+    radar_data = {}
+    max_cost = 0
+    max_dur = 0
+    max_tokens = 0
+
+    # First pass: find maxes for normalization
+    for p in profiles:
+        costs = []
+        durs = []
+        toks = []
+        for t, runs in all_results.get(p, {}).items():
+            r = runs[-1]
+            costs.append(r.get('cost_usd', 0))
+            durs.append(r.get('duration_seconds', 0))
+            toks.append(r.get('output_tokens_raw', r.get('total_output_tokens', 0)))
+        if costs:
+            avg_c = sum(costs) / len(costs)
+            if avg_c > max_cost:
+                max_cost = avg_c
+        if durs:
+            avg_d = sum(durs) / len(durs)
+            if avg_d > max_dur:
+                max_dur = avg_d
+        if toks:
+            avg_t = sum(toks) / len(toks)
+            if avg_t > max_tokens:
+                max_tokens = avg_t
+
+    for p in profiles:
+        tasks_data = all_results.get(p, {})
+        if not tasks_data:
+            continue
+
+        latest = [runs[-1] for runs in tasks_data.values()]
+        total_tasks = len(latest)
+
+        pass_rate = sum(1 for r in latest if r.get('passed', False)) * 100 / total_tasks if total_tasks else 0
+        avg_quality = sum(r.get('quality_score', 100 if r.get('passed') else 0) for r in latest) / total_tasks if total_tasks else 0
+        avg_cost = sum(r.get('cost_usd', 0) for r in latest) / total_tasks if total_tasks else 0
+        avg_dur = sum(r.get('duration_seconds', 0) for r in latest) / total_tasks if total_tasks else 0
+        avg_tokens = sum(r.get('output_tokens_raw', r.get('total_output_tokens', 0)) for r in latest) / total_tasks if total_tasks else 0
+        avg_cache = sum(r.get('cache_efficiency', 0) for r in latest) / total_tasks if total_tasks else 0
+
+        cost_eff = (1 - avg_cost / max_cost) * 100 if max_cost > 0 else 100
+        speed = (1 - avg_dur / max_dur) * 100 if max_dur > 0 else 100
+        token_eff = (1 - avg_tokens / max_tokens) * 100 if max_tokens > 0 else 100
+
+        radar_data[p] = {
+            'pass_rate': round(pass_rate, 1),
+            'quality': round(avg_quality, 1),
+            'cost_efficiency': round(max(0, cost_eff), 1),
+            'speed': round(max(0, speed), 1),
+            'token_efficiency': round(max(0, token_eff), 1),
+            'cache_efficiency': round(avg_cache * 100, 1),
+        }
+
+    # Cost per task per profile (for bar chart)
+    cost_data = {}
+    for p in profiles:
+        cost_data[p] = {}
+        for t in task_names:
+            runs = all_results.get(p, {}).get(t, [])
+            if runs:
+                cost_data[p][t] = runs[-1].get('cost_usd', 0)
+
+    # Trend data (all runs over time)
+    trend_data = {}  # {profile: [{timestamp, cost, quality}]}
+    has_trends = False
+    for p in profiles:
+        runs_list = []
+        for t, runs in all_results.get(p, {}).items():
+            for r in runs:
+                runs_list.append(r)
+        if len(runs_list) > len(task_names):
+            has_trends = True
+        runs_list.sort(key=lambda x: x.get('timestamp', ''))
+        trend_data[p] = runs_list
+
+    # Build results table data
+    table_rows = []
+    for p in profiles:
+        for t in task_names:
+            runs = all_results.get(p, {}).get(t, [])
+            if runs:
+                r = runs[-1]
+                table_rows.append({
+                    'profile': p,
+                    'task': t,
+                    'passed': r.get('passed', False),
+                    'quality_score': r.get('quality_score', 100 if r.get('passed') else 0),
+                    'cost': r.get('cost_usd', 0),
+                    'duration': r.get('duration_seconds', 0),
+                    'output_tokens': r.get('output_tokens_raw', r.get('total_output_tokens', 0)),
+                    'cache_efficiency': r.get('cache_efficiency', 0),
+                    'model': r.get('model', 'unknown'),
+                })
+
+    # Generate HTML
+    radar_datasets_js = []
+    for i, p in enumerate(profiles):
+        if p not in radar_data:
+            continue
+        c = get_color(p, i)
+        d = radar_data[p]
+        radar_datasets_js.append(f"""{{
+            label: '{html.escape(p)}',
+            data: [{d['pass_rate']}, {d['quality']}, {d['cost_efficiency']}, {d['speed']}, {d['token_efficiency']}, {d['cache_efficiency']}],
+            backgroundColor: '{c["bg"]}',
+            borderColor: '{c["border"]}',
+            borderWidth: 2,
+            pointBackgroundColor: '{c["border"]}'
+        }}""")
+
+    cost_datasets_js = []
+    for i, p in enumerate(profiles):
+        c = get_color(p, i)
+        vals = [cost_data.get(p, {}).get(t, 0) for t in task_names]
+        cost_datasets_js.append(f"""{{
+            label: '{html.escape(p)}',
+            data: {json.dumps(vals)},
+            backgroundColor: '{c["border"]}',
+            borderRadius: 4
+        }}""")
+
+    trend_datasets_js = ""
+    if has_trends:
+        trend_cost_ds = []
+        trend_quality_ds = []
+        for i, p in enumerate(profiles):
+            c = get_color(p, i)
+            runs = trend_data.get(p, [])
+            cost_points = json.dumps([{'x': r['timestamp'], 'y': r.get('cost_usd', 0)} for r in runs])
+            quality_points = json.dumps([{'x': r['timestamp'], 'y': r.get('quality_score', 0)} for r in runs])
+            trend_cost_ds.append(f"""{{
+                label: '{html.escape(p)}',
+                data: {cost_points},
+                borderColor: '{c["border"]}',
+                backgroundColor: '{c["bg"]}',
+                tension: 0.3, fill: false
+            }}""")
+            trend_quality_ds.append(f"""{{
+                label: '{html.escape(p)}',
+                data: {quality_points},
+                borderColor: '{c["border"]}',
+                backgroundColor: '{c["bg"]}',
+                tension: 0.3, fill: false
+            }}""")
+        trend_datasets_js = f"""
+        new Chart(document.getElementById('trendCost'), {{
+            type: 'line',
+            data: {{ datasets: [{','.join(trend_cost_ds)}] }},
+            options: {{
+                responsive: true,
+                plugins: {{ title: {{ display: true, text: 'Cost Over Time', font: {{ size: 16 }} }} }},
+                scales: {{
+                    x: {{ type: 'time', time: {{ unit: 'day' }}, title: {{ display: true, text: 'Date' }} }},
+                    y: {{ title: {{ display: true, text: 'Cost (USD)' }}, beginAtZero: true }}
+                }}
+            }}
+        }});
+        new Chart(document.getElementById('trendQuality'), {{
+            type: 'line',
+            data: {{ datasets: [{','.join(trend_quality_ds)}] }},
+            options: {{
+                responsive: true,
+                plugins: {{ title: {{ display: true, text: 'Quality Score Over Time', font: {{ size: 16 }} }} }},
+                scales: {{
+                    x: {{ type: 'time', time: {{ unit: 'day' }}, title: {{ display: true, text: 'Date' }} }},
+                    y: {{ title: {{ display: true, text: 'Quality Score' }}, min: 0, max: 100 }}
+                }}
+            }}
+        }});
+        """
+
+    table_html = ""
+    for row in table_rows:
+        c = get_color(row['profile'], profiles.index(row['profile']))
+        badge = '<span class="badge pass">PASS</span>' if row['passed'] else '<span class="badge fail">FAIL</span>'
+        table_html += f"""<tr>
+            <td><span class="dot" style="background:{c['border']}"></span>{html.escape(row['profile'])}</td>
+            <td>{html.escape(row['task'])}</td>
+            <td>{badge}</td>
+            <td>{row['quality_score']}</td>
+            <td>${row['cost']:.4f}</td>
+            <td>{row['duration']}s</td>
+            <td>{row['output_tokens']:,}</td>
+            <td>{row['cache_efficiency']*100:.1f}%</td>
+        </tr>"""
+
+    trend_html = ""
+    if has_trends:
+        trend_html = """
+        <div class="section">
+            <h2>Trends</h2>
+            <div class="chart-row">
+                <div class="chart-container"><canvas id="trendCost"></canvas></div>
+                <div class="chart-container"><canvas id="trendQuality"></canvas></div>
+            </div>
+        </div>"""
+
+    trend_adapter = ""
+    if has_trends:
+        trend_adapter = '<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>'
+
+    page = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Personalities — Benchmark Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+{trend_adapter}
+<style>
+  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; padding: 2rem; }}
+  h1 {{ font-size: 1.8rem; margin-bottom: 0.5rem; color: #f8fafc; }}
+  h2 {{ font-size: 1.3rem; margin-bottom: 1rem; color: #94a3b8; }}
+  .subtitle {{ color: #64748b; margin-bottom: 2rem; }}
+  .section {{ background: #1e293b; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }}
+  .chart-row {{ display: flex; gap: 1.5rem; flex-wrap: wrap; }}
+  .chart-container {{ flex: 1; min-width: 300px; max-width: 600px; }}
+  .radar-container {{ flex: 1; min-width: 350px; max-width: 500px; aspect-ratio: 1; }}
+  table {{ width: 100%; border-collapse: collapse; }}
+  th {{ text-align: left; padding: 0.75rem; color: #94a3b8; border-bottom: 1px solid #334155; font-weight: 500; }}
+  td {{ padding: 0.75rem; border-bottom: 1px solid #1e293b; }}
+  tr:hover {{ background: #1e293b; }}
+  .badge {{ padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }}
+  .badge.pass {{ background: #065f46; color: #6ee7b7; }}
+  .badge.fail {{ background: #7f1d1d; color: #fca5a5; }}
+  .dot {{ display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }}
+  .generated {{ text-align: center; color: #475569; margin-top: 2rem; font-size: 0.85rem; }}
+</style>
+</head>
+<body>
+<h1>Claude Personalities — Benchmark Dashboard</h1>
+<p class="subtitle">Generated from _metrics/benchmarks/ &middot; {len(profiles)} profiles &middot; {len(task_names)} tasks</p>
+
+<div class="section">
+    <h2>Profile Radar — 6-Axis Comparison</h2>
+    <div class="chart-row">
+        <div class="radar-container"><canvas id="radar"></canvas></div>
+    </div>
+</div>
+
+<div class="section">
+    <h2>Cost per Task</h2>
+    <div class="chart-row">
+        <div class="chart-container" style="max-width:900px"><canvas id="costBar"></canvas></div>
+    </div>
+</div>
+
+{trend_html}
+
+<div class="section">
+    <h2>Results Detail</h2>
+    <table>
+        <thead><tr><th>Profile</th><th>Task</th><th>Status</th><th>Quality</th><th>Cost</th><th>Duration</th><th>Output Tokens</th><th>Cache Eff.</th></tr></thead>
+        <tbody>{table_html}</tbody>
+    </table>
+</div>
+
+<p class="generated">Generated by ./setup.sh benchmark --report --html</p>
+
+<script>
+new Chart(document.getElementById('radar'), {{
+    type: 'radar',
+    data: {{
+        labels: ['Pass Rate', 'Quality Score', 'Cost Efficiency', 'Speed', 'Token Efficiency', 'Cache Efficiency'],
+        datasets: [{','.join(radar_datasets_js)}]
+    }},
+    options: {{
+        responsive: true,
+        maintainAspectRatio: true,
+        scales: {{
+            r: {{
+                min: 0, max: 100,
+                ticks: {{ stepSize: 20, color: '#64748b', backdropColor: 'transparent' }},
+                grid: {{ color: '#334155' }},
+                angleLines: {{ color: '#334155' }},
+                pointLabels: {{ color: '#94a3b8', font: {{ size: 13 }} }}
+            }}
+        }},
+        plugins: {{ legend: {{ labels: {{ color: '#e2e8f0' }} }} }}
+    }}
+}});
+
+new Chart(document.getElementById('costBar'), {{
+    type: 'bar',
+    data: {{
+        labels: {json.dumps(task_names)},
+        datasets: [{','.join(cost_datasets_js)}]
+    }},
+    options: {{
+        responsive: true,
+        plugins: {{
+            legend: {{ labels: {{ color: '#e2e8f0' }} }},
+            title: {{ display: false }}
+        }},
+        scales: {{
+            x: {{ ticks: {{ color: '#94a3b8' }}, grid: {{ color: '#1e293b' }} }},
+            y: {{ ticks: {{ color: '#94a3b8', callback: function(v) {{ return '$' + v.toFixed(2); }} }}, grid: {{ color: '#334155' }}, title: {{ display: true, text: 'Cost (USD)', color: '#94a3b8' }} }}
+        }}
+    }}
+}});
+
+{trend_datasets_js}
+</script>
+</body>
+</html>"""
+
+    with open(out_file, 'w') as f:
+        f.write(page)
+
+    print(f'Dashboard written to {out_file}')
+
+except Exception as e:
+    print(f'Dashboard generation failed: {e}')
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+PYEOF
+
+	# Open in default browser
+	if [ -f "$out_file" ]; then
+		open "$out_file" 2>/dev/null || xdg-open "$out_file" 2>/dev/null || echo "Open $out_file in your browser."
+	fi
+}
+
 # Main benchmark command.
-# Usage: cmd_benchmark [--task <name>] [--report]
+# Usage: cmd_benchmark [--task <name>] [--report] [--html]
 cmd_benchmark() {
 	local mode="run"
 	local single_task=""
+	local html_flag=0
 
 	while [ $# -gt 0 ]; do
 		case "$1" in
@@ -1614,14 +2013,28 @@ cmd_benchmark() {
 				mode="report"
 				shift
 				;;
+			--html)
+				html_flag=1
+				shift
+				;;
 			*)
 				shift
 				;;
 		esac
 	done
 
+	if [ "$html_flag" -eq 1 ] && [ "$mode" != "report" ]; then
+		echo "usage: ./setup.sh benchmark --report --html"
+		echo "--html requires --report"
+		return 1
+	fi
+
 	if [ "$mode" = "report" ]; then
-		_benchmark_report
+		if [ "$html_flag" -eq 1 ]; then
+			_benchmark_html_report
+		else
+			_benchmark_report
+		fi
 		return
 	fi
 
