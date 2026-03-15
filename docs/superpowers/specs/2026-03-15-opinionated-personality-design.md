@@ -28,8 +28,10 @@ The opinionated profile uses three enforcement layers, inspired by Trail of Bits
 | File | Action | Description |
 |------|--------|-------------|
 | `claude/CLAUDE.md` | Integrated rewrite | ~255 lines. Merge opinions into natural sections. Single coherent voice. |
-| `claude/settings.json` | Add deny + hooks | 12 deny rules, 2 PreToolUse hooks |
+| `claude/settings.json` | Add deny + hooks | 10 deny rules, 2 PreToolUse hook scripts |
 | `claude/skills/learnings/SKILL.md` | New file | ~55 lines. LEARNINGS.md discipline protocol. |
+| `claude/hooks/block-rm-rf.sh` | New file | PreToolUse hook script — blocks rm -rf, suggests trash |
+| `claude/hooks/block-push-main.sh` | New file | PreToolUse hook script — blocks push to main/master, suggests PR |
 
 ## CLAUDE.md Structure
 
@@ -40,6 +42,11 @@ Section order for the integrated rewrite:
 ## Node.js (nvm)                    (unchanged)
 ## Rust (rustup)                    (unchanged)
 ## Python (pyenv)                   (unchanged)
+
+## When to Ask vs. Proceed           (MODIFIED — integrated with philosophy)
+  Absorbed into Engineering Philosophy "bias toward action / gate on
+  irreversibility" imperative. Base rule preserved: ask when uncertain
+  about intent, scope, or approach. Always confirm destructive actions.
 
 ## Engineering Philosophy            (~15 lines, NEW)
   9 imperatives: no speculative features, no premature abstraction,
@@ -131,28 +138,61 @@ Section order for the integrated rewrite:
   "Bash(rm -fr *)",
   "Bash(sudo *)",
   "Bash(git push --force*)",
-  "Bash(git reset --hard*)",
-  "Bash(*wget*|*bash*)",
-  "Bash(*curl*|*bash*)"
+  "Bash(git reset --hard*)"
 ]
+```
+
+**Removed:** `Bash(*wget*|*bash*)` and `Bash(*curl*|*bash*)` — the `|` in glob patterns would match ANY command containing "bash" as a substring, blocking legitimate shell operations. Pipe-to-bash is covered by the "Things to Never Do" soft rule in CLAUDE.md.
+
+**Note:** The existing `Bash(rm:*)` allow rule remains in the allow list. Deny rules take precedence over allow rules in Claude Code, so `rm -rf` is blocked while `rm file.txt` is still permitted.
 ```
 
 ### Hooks (new)
 
+Claude Code hooks receive tool input as JSON on stdin. Hooks are external scripts, not inline commands.
+
+**settings.json format:**
 ```json
 "hooks": {
   "PreToolUse": [
     {
       "matcher": "Bash",
-      "command": "case \"$TOOL_INPUT\" in *'rm -rf'*|*'rm -fr'*) echo 'BLOCKED: Use trash or mv instead of rm -rf. Confirm with user.' >&2; exit 2;; esac"
-    },
-    {
-      "matcher": "Bash",
-      "command": "case \"$TOOL_INPUT\" in *'git push'*'main'*|*'git push'*'master'*) echo 'BLOCKED: Never push directly to main. Create a PR instead.' >&2; exit 2;; esac"
+      "hooks": [
+        {
+          "type": "command",
+          "command": "claude/hooks/block-rm-rf.sh"
+        },
+        {
+          "type": "command",
+          "command": "claude/hooks/block-push-main.sh"
+        }
+      ]
     }
   ]
 }
 ```
+
+**`claude/hooks/block-rm-rf.sh`:**
+```bash
+#!/bin/bash
+INPUT=$(cat)
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command')
+if echo "$COMMAND" | grep -qE 'rm\s+-(rf|fr)\s'; then
+  echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"BLOCKED: Use trash or mv instead of rm -rf. Confirm with user before deleting."}}'
+fi
+```
+
+**`claude/hooks/block-push-main.sh`:**
+```bash
+#!/bin/bash
+INPUT=$(cat)
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command')
+if echo "$COMMAND" | grep -qE 'git push.*(origin|upstream)\s+(main|master)'; then
+  echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"BLOCKED: Never push directly to main/master. Create a PR instead: gh pr create"}}'
+fi
+```
+
+Both scripts exit 0 with JSON `permissionDecision: "deny"` to block with guidance. No output + exit 0 = allow.
 
 ## LEARNINGS Skill
 
@@ -179,6 +219,9 @@ A fix that works is a fix regardless of which personality is active. The knowled
 
 ### Why deny rules AND hooks?
 Deny rules silently block. Hooks block with actionable guidance ("use trash instead"). Belt-and-suspenders: deny catches everything, hooks teach Claude what to do instead.
+
+### Why no enforcement layer for code quality thresholds?
+Code quality thresholds (function length, complexity, params) are enforced via CLAUDE.md instructions only. The deny rules and hooks cover security/destructive actions where the cost of violation is high and detection is simple (string matching on commands). Code quality enforcement would require language-specific tooling (linters, complexity analyzers) and PostToolUse hooks — a v2 enhancement. The profiling workstream will reveal whether CLAUDE.md-only enforcement is sufficient.
 
 ### Why 50-line function limit instead of Trail of Bits's 100?
 This is the strict profile — the whole point is to be opinionated. 100 lines is a reasonable moderate default. 50 forces extraction earlier, which is the behavior we want to benchmark against the base profile (which has no limit at all).
@@ -214,6 +257,7 @@ To be generated via the writing-plans skill after spec approval. High-level:
 
 1. Rewrite `claude/CLAUDE.md` with integrated opinion sections
 2. Update `claude/settings.json` with deny rules and hooks
-3. Create `claude/skills/learnings/SKILL.md`
-4. Commit on `opinionated` branch
-5. Verify by reading all files and checking for contradictions
+3. Create `claude/hooks/block-rm-rf.sh` and `claude/hooks/block-push-main.sh`
+4. Create `claude/skills/learnings/SKILL.md`
+5. Commit on `opinionated` branch
+6. Verify by reading all files and checking for contradictions
