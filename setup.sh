@@ -1336,84 +1336,84 @@ _benchmark_run_task() {
 
 	# Extract metrics from verify output
 	local quality_score
-	quality_score="$(echo "$verify_output" | grep -oE 'SCORE:[0-9]+' | tail -1 | cut -d: -f2)"
+	quality_score="$(echo "$verify_output" | grep -oE 'SCORE:[0-9]+' | tail -1 | cut -d: -f2 || true)"
 	[ -z "$quality_score" ] && { [ "$passed" = "true" ] && quality_score=100 || quality_score=0; }
 
 	local files_extra
-	files_extra="$(echo "$verify_output" | grep -oE 'FILES_EXTRA:[0-9]+' | cut -d: -f2)"
+	files_extra="$(echo "$verify_output" | grep -oE 'FILES_EXTRA:[0-9]+' | cut -d: -f2 || true)"
 	[ -z "$files_extra" ] && files_extra=0
 
 	local lines_generated
-	lines_generated="$(echo "$verify_output" | grep -oE 'LINES_GENERATED:[0-9]+' | cut -d: -f2)"
+	lines_generated="$(echo "$verify_output" | grep -oE 'LINES_GENERATED:[0-9]+' | cut -d: -f2 || true)"
 	[ -z "$lines_generated" ] && lines_generated=0
 
 	local lint_issues
-	lint_issues="$(echo "$verify_output" | grep -oE 'LINT_ISSUES:[0-9]+' | cut -d: -f2)"
+	lint_issues="$(echo "$verify_output" | grep -oE 'LINT_ISSUES:[0-9]+' | cut -d: -f2 || true)"
 	[ -z "$lint_issues" ] && lint_issues=0
 
 	local complexity_avg
-	complexity_avg="$(echo "$verify_output" | grep -oE 'COMPLEXITY_AVG:[0-9.]+' | cut -d: -f2)"
+	complexity_avg="$(echo "$verify_output" | grep -oE 'COMPLEXITY_AVG:[0-9.]+' | cut -d: -f2 || true)"
 	[ -z "$complexity_avg" ] && complexity_avg=0
 
 	local complexity_max
-	complexity_max="$(echo "$verify_output" | grep -oE 'COMPLEXITY_MAX:[0-9]+' | cut -d: -f2)"
+	complexity_max="$(echo "$verify_output" | grep -oE 'COMPLEXITY_MAX:[0-9]+' | cut -d: -f2 || true)"
 	[ -z "$complexity_max" ] && complexity_max=0
 
 	local max_func_length
-	max_func_length="$(echo "$verify_output" | grep -oE 'MAX_FUNCTION_LENGTH:[0-9]+' | cut -d: -f2)"
+	max_func_length="$(echo "$verify_output" | grep -oE 'MAX_FUNCTION_LENGTH:[0-9]+' | cut -d: -f2 || true)"
 	[ -z "$max_func_length" ] && max_func_length=0
 
 	local funcs_over_50
-	funcs_over_50="$(echo "$verify_output" | grep -oE 'FUNCTIONS_OVER_50:[0-9]+' | cut -d: -f2)"
+	funcs_over_50="$(echo "$verify_output" | grep -oE 'FUNCTIONS_OVER_50:[0-9]+' | cut -d: -f2 || true)"
 	[ -z "$funcs_over_50" ] && funcs_over_50=0
 
 	# Tier 3 analyzer metrics
 	local security_smells
-	security_smells="$(echo "$verify_output" | grep -oE 'SECURITY_SMELLS:[0-9]+' | cut -d: -f2)"
+	security_smells="$(echo "$verify_output" | grep -oE 'SECURITY_SMELLS:[0-9]+' | cut -d: -f2 || true)"
 	[ -z "$security_smells" ] && security_smells=0
 
 	local naming_score
-	naming_score="$(echo "$verify_output" | grep -oE 'NAMING_SCORE:[0-9]+' | cut -d: -f2)"
+	naming_score="$(echo "$verify_output" | grep -oE 'NAMING_SCORE:[0-9]+' | cut -d: -f2 || true)"
 	[ -z "$naming_score" ] && naming_score=100
 
 	local naming_generic
-	naming_generic="$(echo "$verify_output" | grep -oE 'NAMING_GENERIC_COUNT:[0-9]+' | cut -d: -f2)"
+	naming_generic="$(echo "$verify_output" | grep -oE 'NAMING_GENERIC_COUNT:[0-9]+' | cut -d: -f2 || true)"
 	[ -z "$naming_generic" ] && naming_generic=0
 
 	local overengineering_score
-	overengineering_score="$(echo "$verify_output" | grep -oE 'OVERENGINEERING_SCORE:[0-9]+' | cut -d: -f2)"
+	overengineering_score="$(echo "$verify_output" | grep -oE 'OVERENGINEERING_SCORE:[0-9]+' | cut -d: -f2 || true)"
 	[ -z "$overengineering_score" ] && overengineering_score=100
 
 	local regression_score
-	regression_score="$(echo "$verify_output" | grep -oE 'REGRESSION_SCORE:[0-9]+' | cut -d: -f2)"
+	regression_score="$(echo "$verify_output" | grep -oE 'REGRESSION_SCORE:[0-9]+' | cut -d: -f2 || true)"
 	[ -z "$regression_score" ] && regression_score=100
 
 	local regression_broken
-	regression_broken="$(echo "$verify_output" | grep -oE 'REGRESSION_BROKEN:[0-9]+' | cut -d: -f2)"
+	regression_broken="$(echo "$verify_output" | grep -oE 'REGRESSION_BROKEN:[0-9]+' | cut -d: -f2 || true)"
 	[ -z "$regression_broken" ] && regression_broken=0
 
 	local judge_score
-	judge_score="$(echo "$verify_output" | grep -oE 'JUDGE_SCORE:[0-9]+' | cut -d: -f2)"
+	judge_score="$(echo "$verify_output" | grep -oE 'JUDGE_SCORE:[0-9]+' | cut -d: -f2 || true)"
 	[ -z "$judge_score" ] && judge_score=0
 
 	local judge_readability
-	judge_readability="$(echo "$verify_output" | grep -oE 'JUDGE_READABILITY:[0-9]+' | cut -d: -f2)"
+	judge_readability="$(echo "$verify_output" | grep -oE 'JUDGE_READABILITY:[0-9]+' | cut -d: -f2 || true)"
 	[ -z "$judge_readability" ] && judge_readability=0
 
 	local judge_naming
-	judge_naming="$(echo "$verify_output" | grep -oE 'JUDGE_NAMING:[0-9]+' | cut -d: -f2)"
+	judge_naming="$(echo "$verify_output" | grep -oE 'JUDGE_NAMING:[0-9]+' | cut -d: -f2 || true)"
 	[ -z "$judge_naming" ] && judge_naming=0
 
 	local judge_error_handling
-	judge_error_handling="$(echo "$verify_output" | grep -oE 'JUDGE_ERROR_HANDLING:[0-9]+' | cut -d: -f2)"
+	judge_error_handling="$(echo "$verify_output" | grep -oE 'JUDGE_ERROR_HANDLING:[0-9]+' | cut -d: -f2 || true)"
 	[ -z "$judge_error_handling" ] && judge_error_handling=0
 
 	local judge_idiomatic
-	judge_idiomatic="$(echo "$verify_output" | grep -oE 'JUDGE_IDIOMATIC:[0-9]+' | cut -d: -f2)"
+	judge_idiomatic="$(echo "$verify_output" | grep -oE 'JUDGE_IDIOMATIC:[0-9]+' | cut -d: -f2 || true)"
 	[ -z "$judge_idiomatic" ] && judge_idiomatic=0
 
 	local judge_abstraction
-	judge_abstraction="$(echo "$verify_output" | grep -oE 'JUDGE_ABSTRACTION:[0-9]+' | cut -d: -f2)"
+	judge_abstraction="$(echo "$verify_output" | grep -oE 'JUDGE_ABSTRACTION:[0-9]+' | cut -d: -f2 || true)"
 	[ -z "$judge_abstraction" ] && judge_abstraction=0
 
 	# Extract metrics from claude JSON output and write result
@@ -2055,6 +2055,90 @@ try:
     if has_trends:
         trend_adapter = '<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>'
 
+    # Gauge KPI: composite fitness score per profile (average of all radar values)
+    gauge_scores = {}
+    for p in active_profiles:
+        vals = [radar_data[p].get(k, 50) for k, _ in metrics_config]
+        gauge_scores[p] = round(sum(vals) / len(vals), 1) if vals else 50
+
+    gauge_canvases_html = ""
+    gauge_charts_js = ""
+    for i, p in enumerate(active_profiles):
+        canvas_id = f"gauge_{i}"
+        score = gauge_scores[p]
+        c = get_color(p, i)
+        gauge_canvases_html += f'<div class="gauge-container"><canvas id="{canvas_id}"></canvas></div>\n'
+        escaped_name = html.escape(p)
+        gauge_charts_js += (
+            f"new Chart(document.getElementById('{canvas_id}'), {{\n"
+            f"    type: 'doughnut',\n"
+            f"    data: {{ datasets: [{{ data: [{score}, {100-score}], backgroundColor: ['{c['border']}', '#1e293b'], borderWidth: 0 }}] }},\n"
+            f"    options: {{\n"
+            f"        rotation: -90,\n"
+            f"        circumference: 180,\n"
+            f"        cutout: '75%',\n"
+            f"        plugins: {{ legend: {{ display: false }}, tooltip: {{ enabled: false }} }}\n"
+            f"    }},\n"
+            f"    plugins: [{{\n"
+            f"        id: 'gaugeLabel',\n"
+            f"        afterDraw(chart) {{\n"
+            f"            const {{ctx, chartArea: {{left, right, top, bottom}}}} = chart;\n"
+            f"            ctx.save();\n"
+            f"            ctx.textAlign = 'center';\n"
+            f"            ctx.fillStyle = '#e2e8f0';\n"
+            f"            ctx.font = 'bold 28px sans-serif';\n"
+            f"            ctx.fillText('{score}', (left+right)/2, bottom - 10);\n"
+            f"            ctx.font = '14px sans-serif';\n"
+            f"            ctx.fillStyle = '#94a3b8';\n"
+            f"            ctx.fillText('{escaped_name}', (left+right)/2, bottom + 14);\n"
+            f"            ctx.restore();\n"
+            f"        }}\n"
+            f"    }}]\n"
+            f"}});\n"
+        )
+
+    # Heatmap: profile x metric matrix with colored cells
+    def score_to_rgb(score):
+        if score < 50:
+            r, g = 239, int(68 + (score/50) * (163-68))
+            b = int(68 + (score/50) * (0-68))
+        else:
+            r = int(239 - ((score-50)/50) * (239-16))
+            g = int(163 + ((score-50)/50) * (185-163))
+            b = int(0 + ((score-50)/50) * (129-0))
+        return f'rgb({r},{g},{b})'
+
+    heatmap_html = '<table class="heatmap"><thead><tr><th></th>'
+    for p in active_profiles:
+        heatmap_html += f'<th>{html.escape(p)}</th>'
+    heatmap_html += '</tr></thead><tbody>'
+    for mi, (metric, _) in enumerate(metrics_config):
+        label = radar_labels[mi]
+        heatmap_html += f'<tr><th style="text-align:left">{html.escape(label)}</th>'
+        for p in active_profiles:
+            val = radar_data[p].get(metric, 50)
+            color = score_to_rgb(val)
+            heatmap_html += f'<td style="background-color:{color}">{val}</td>'
+        heatmap_html += '</tr>'
+    heatmap_html += '</tbody></table>'
+
+    # Pareto scatter: tokens vs quality per task
+    pareto_datasets_js = []
+    for i, p in enumerate(profiles):
+        c = get_color(p, i)
+        points = []
+        for row in table_rows:
+            if row['profile'] == p:
+                points.append({'x': row['output_tokens'], 'y': row['quality_score']})
+        pareto_datasets_js.append(f"""{{
+            label: '{html.escape(p)}',
+            data: {json.dumps(points)},
+            backgroundColor: '{c["border"]}',
+            borderColor: '{c["border"]}',
+            pointRadius: 8,
+            pointHoverRadius: 12
+        }}""")
+
     page = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2081,6 +2165,9 @@ try:
   .badge.pass {{ background: #065f46; color: #6ee7b7; }}
   .badge.fail {{ background: #7f1d1d; color: #fca5a5; }}
   .dot {{ display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }}
+  .gauge-container {{ flex: 1; min-width: 180px; max-width: 250px; }}
+  .heatmap td {{ padding: 8px 16px; text-align: center; font-weight: 600; color: #fff; border-radius: 4px; }}
+  .heatmap th {{ color: #94a3b8; padding: 8px; font-weight: 500; }}
   .generated {{ text-align: center; color: #475569; margin-top: 2rem; font-size: 0.85rem; }}
 </style>
 </head>
@@ -2092,6 +2179,25 @@ try:
     <h2>Profile Radar — 6-Axis Comparison</h2>
     <div class="chart-row">
         <div class="radar-container"><canvas id="radar"></canvas></div>
+    </div>
+</div>
+
+<div class="section">
+    <h2>Profile Fitness</h2>
+    <div class="chart-row">
+        {gauge_canvases_html}
+    </div>
+</div>
+
+<div class="section">
+    <h2>Metric Heatmap</h2>
+    {heatmap_html}
+</div>
+
+<div class="section">
+    <h2>Token Efficiency vs Quality</h2>
+    <div class="chart-row">
+        <div class="chart-container" style="max-width:700px"><canvas id="paretoScatter"></canvas></div>
     </div>
 </div>
 
@@ -2171,6 +2277,24 @@ new Chart(document.getElementById('tokenBreakdown'), {{
         scales: {{
             x: {{ stacked: true, ticks: {{ color: '#94a3b8' }}, grid: {{ color: '#1e293b' }} }},
             y: {{ stacked: true, ticks: {{ color: '#94a3b8' }}, grid: {{ color: '#334155' }}, title: {{ display: true, text: 'Tokens', color: '#94a3b8' }} }}
+        }}
+    }}
+}});
+
+{gauge_charts_js}
+
+new Chart(document.getElementById('paretoScatter'), {{
+    type: 'scatter',
+    data: {{ datasets: [{','.join(pareto_datasets_js)}] }},
+    options: {{
+        responsive: true,
+        plugins: {{
+            title: {{ display: true, text: 'Token Efficiency vs Quality', font: {{ size: 14 }}, color: '#94a3b8' }},
+            legend: {{ labels: {{ color: '#e2e8f0' }} }}
+        }},
+        scales: {{
+            x: {{ title: {{ display: true, text: 'Output Tokens', color: '#94a3b8' }}, ticks: {{ color: '#94a3b8' }}, grid: {{ color: '#334155' }} }},
+            y: {{ title: {{ display: true, text: 'Quality Score', color: '#94a3b8' }}, ticks: {{ color: '#94a3b8' }}, grid: {{ color: '#334155' }}, min: 0, max: 100 }}
         }}
     }}
 }});
