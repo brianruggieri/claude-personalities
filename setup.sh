@@ -1771,14 +1771,20 @@ try:
                 radar_data[p] = {}
             radar_data[p][metric] = scaled[i]
 
-    # Cost per task per profile (for bar chart)
-    cost_data = {}
+    # Tokens per task per profile (for bar chart — more meaningful than cost for subscription)
+    token_data = {}  # {profile: {task: {input, output, cache_creation, cache_read}}}
     for p in profiles:
-        cost_data[p] = {}
+        token_data[p] = {}
         for t in task_names:
             runs = all_results.get(p, {}).get(t, [])
             if runs:
-                cost_data[p][t] = runs[-1].get('cost_usd', 0)
+                r = runs[-1]
+                token_data[p][t] = {
+                    'input': r.get('total_input_tokens', 0),
+                    'output': r.get('output_tokens_raw', r.get('total_output_tokens', 0)),
+                    'cache_creation': r.get('cache_creation_tokens', 0),
+                    'cache_read': r.get('cache_read_tokens', 0),
+                }
 
     # Trend data (all runs over time)
     trend_data = {}  # {profile: [{timestamp, cost, quality}]}
@@ -1831,15 +1837,31 @@ try:
             pointBackgroundColor: '{c["border"]}'
         }}""")
 
-    cost_datasets_js = []
+    # Output tokens per task (grouped bar — one bar per profile)
+    output_token_datasets_js = []
     for i, p in enumerate(profiles):
         c = get_color(p, i)
-        vals = [cost_data.get(p, {}).get(t, 0) for t in task_names]
-        cost_datasets_js.append(f"""{{
+        vals = [token_data.get(p, {}).get(t, {}).get('output', 0) for t in task_names]
+        output_token_datasets_js.append(f"""{{
             label: '{html.escape(p)}',
             data: {json.dumps(vals)},
             backgroundColor: '{c["border"]}',
             borderRadius: 4
+        }}""")
+
+    # Total tokens per profile (stacked bar showing composition)
+    token_categories = ['Input', 'Output', 'Cache Creation', 'Cache Read']
+    token_cat_colors = ['#f87171', '#fbbf24', '#34d399', '#60a5fa']
+    token_stacked_datasets = []
+    for ci, (cat, cat_key) in enumerate(zip(token_categories, ['input', 'output', 'cache_creation', 'cache_read'])):
+        vals = []
+        for p in profiles:
+            total = sum(td.get(cat_key, 0) for td in token_data.get(p, {}).values())
+            vals.append(total)
+        token_stacked_datasets.append(f"""{{
+            label: '{cat}',
+            data: {json.dumps(vals)},
+            backgroundColor: '{token_cat_colors[ci]}'
         }}""")
 
     trend_datasets_js = ""
@@ -1968,9 +1990,10 @@ try:
 </div>
 
 <div class="section">
-    <h2>Cost per Task</h2>
+    <h2>Token Usage</h2>
     <div class="chart-row">
-        <div class="chart-container" style="max-width:900px"><canvas id="costBar"></canvas></div>
+        <div class="chart-container" style="max-width:600px"><canvas id="outputTokenBar"></canvas></div>
+        <div class="chart-container" style="max-width:600px"><canvas id="tokenBreakdown"></canvas></div>
     </div>
 </div>
 
@@ -2009,21 +2032,39 @@ new Chart(document.getElementById('radar'), {{
     }}
 }});
 
-new Chart(document.getElementById('costBar'), {{
+new Chart(document.getElementById('outputTokenBar'), {{
     type: 'bar',
     data: {{
         labels: {json.dumps(task_names)},
-        datasets: [{','.join(cost_datasets_js)}]
+        datasets: [{','.join(output_token_datasets_js)}]
     }},
     options: {{
         responsive: true,
         plugins: {{
             legend: {{ labels: {{ color: '#e2e8f0' }} }},
-            title: {{ display: false }}
+            title: {{ display: true, text: 'Output Tokens per Task', font: {{ size: 14 }}, color: '#94a3b8' }}
         }},
         scales: {{
             x: {{ ticks: {{ color: '#94a3b8' }}, grid: {{ color: '#1e293b' }} }},
-            y: {{ ticks: {{ color: '#94a3b8', callback: function(v) {{ return '$' + v.toFixed(2); }} }}, grid: {{ color: '#334155' }}, title: {{ display: true, text: 'Cost (USD)', color: '#94a3b8' }} }}
+            y: {{ ticks: {{ color: '#94a3b8' }}, grid: {{ color: '#334155' }}, title: {{ display: true, text: 'Tokens', color: '#94a3b8' }} }}
+        }}
+    }}
+}});
+new Chart(document.getElementById('tokenBreakdown'), {{
+    type: 'bar',
+    data: {{
+        labels: {json.dumps(profiles)},
+        datasets: [{','.join(token_stacked_datasets)}]
+    }},
+    options: {{
+        responsive: true,
+        plugins: {{
+            legend: {{ labels: {{ color: '#e2e8f0' }} }},
+            title: {{ display: true, text: 'Total Token Breakdown by Profile', font: {{ size: 14 }}, color: '#94a3b8' }}
+        }},
+        scales: {{
+            x: {{ stacked: true, ticks: {{ color: '#94a3b8' }}, grid: {{ color: '#1e293b' }} }},
+            y: {{ stacked: true, ticks: {{ color: '#94a3b8' }}, grid: {{ color: '#334155' }}, title: {{ display: true, text: 'Tokens', color: '#94a3b8' }} }}
         }}
     }}
 }});
