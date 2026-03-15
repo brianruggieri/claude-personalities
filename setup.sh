@@ -76,6 +76,10 @@ Metrics:
   snapshot                         Capture current session metrics for active profile
   snapshot --all                   Capture metrics for all projects
 
+  Tip: Auto-capture with a SessionEnd hook in claude/settings.json:
+    "hooks": { "SessionEnd": [{ "type": "command",
+      "command": "~/git/claude_personalities/setup.sh snapshot --quiet" }] }
+
 Setup:
   backup          Back up current ~/.claude/ personality files
   import          Import personality files from ~/.claude/ into this repo
