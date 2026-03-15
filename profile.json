@@ -1,0 +1,17 @@
+{
+	"name": "main",
+	"description": "Full-featured daily driver with design, testing, and development skills",
+	"author": "anonymous",
+	"category": "full-stack",
+	"tags": ["design", "testing", "browser-automation", "code-review", "tdd"],
+	"capabilities": [
+		"frontend-design",
+		"tdd-workflow",
+		"code-review",
+		"browser-testing",
+		"api-docs-lookup",
+		"typescript-intelligence",
+		"design-polish",
+		"autonomous-loops"
+	]
+}

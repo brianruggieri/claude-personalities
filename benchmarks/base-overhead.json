@@ -1,0 +1,12 @@
+{
+	"claude_code_version": "2.1.76",
+	"source": "https://github.com/Piebald-AI/claude-code-system-prompts",
+	"last_updated": "2026-03-15",
+	"base_tokens": {
+		"system_prompt_fragments": 3000,
+		"tool_descriptions": 8500,
+		"misc_overhead": 1500,
+		"total": 13000
+	},
+	"notes": "Tokens Claude Code injects regardless of profile configuration. Profile overhead is additive. Update when Claude Code releases a new version with significant prompt changes."
+}
