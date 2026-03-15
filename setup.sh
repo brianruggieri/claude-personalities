@@ -1311,6 +1311,13 @@ _benchmark_run_task() {
 		verify_output="$("$task_dir/verify.sh" "$tmpdir" 2>&1)" && passed=true || passed=false
 	fi
 
+	# Extract SCORE from verify output (format: SCORE:<0-100>)
+	local quality_score
+	quality_score="$(echo "$verify_output" | grep -oE 'SCORE:[0-9]+' | tail -1 | cut -d: -f2)"
+	if [ -z "$quality_score" ]; then
+		[ "$passed" = "true" ] && quality_score=100 || quality_score=0
+	fi
+
 	# Extract metrics from claude JSON output and write result
 	local results_dir="$REPO_DIR/_metrics/benchmarks/$profile/$task_name"
 	mkdir -p "$results_dir"
@@ -1318,9 +1325,12 @@ _benchmark_run_task() {
 	timestamp="$(date -u +%Y%m%d-%H%M%S)"
 
 	python3 - "$claude_output_file" "$profile" "$task_name" \
-		"$results_dir/${timestamp}.json" "$passed" <<'PYEOF'
+		"$results_dir/${timestamp}.json" "$passed" "$quality_score" <<'PYEOF'
 import json, sys
 from datetime import datetime, timezone
+
+def safe_div(a, b):
+    return a / b if b != 0 else 0.0
 
 try:
     claude_output_path = sys.argv[1]
@@ -1328,6 +1338,7 @@ try:
     task_name = sys.argv[3]
     out_path = sys.argv[4]
     passed = sys.argv[5] == 'true'
+    quality_score = int(sys.argv[6])
 
     cost = 0
     duration = 0
@@ -1353,18 +1364,24 @@ try:
     except Exception:
         pass
 
+    total_in = cache_read + cache_creation + input_tokens
+    cache_efficiency = round(safe_div(cache_read, total_in), 3)
+
     result = {
         'profile': profile,
         'task': task_name,
         'timestamp': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
         'passed': passed,
         'score': 1 if passed else 0,
+        'quality_score': quality_score,
         'cost_usd': cost,
         'duration_seconds': duration,
         'total_input_tokens': input_tokens,
         'total_output_tokens': output_tokens,
+        'output_tokens_raw': output_tokens,
         'cache_read_tokens': cache_read,
         'cache_creation_tokens': cache_creation,
+        'cache_efficiency': cache_efficiency,
         'model': model,
     }
 
@@ -1373,17 +1390,18 @@ try:
         f.write('\n')
 
 except Exception as e:
-    # Write a fallback result so the runner always has something to report
     try:
         fallback = {
             'profile': sys.argv[2], 'task': sys.argv[3],
             'timestamp': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
             'passed': sys.argv[5] == 'true',
             'score': 1 if sys.argv[5] == 'true' else 0,
+            'quality_score': int(sys.argv[6]) if len(sys.argv) > 6 else 0,
             'cost_usd': 0, 'duration_seconds': 0,
             'total_input_tokens': 0, 'total_output_tokens': 0,
+            'output_tokens_raw': 0,
             'cache_read_tokens': 0, 'cache_creation_tokens': 0,
-            'model': 'unknown', 'error': str(e),
+            'cache_efficiency': 0, 'model': 'unknown', 'error': str(e),
         }
         with open(sys.argv[4], 'w') as f:
             json.dump(fallback, f, indent=2)
