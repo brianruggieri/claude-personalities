@@ -1,0 +1,10 @@
+{
+  "name": "fix-python-bug",
+  "description": "Fix a failing test in a small Python project",
+  "category": "debugging",
+  "capability": "tdd-workflow",
+  "difficulty": "basic",
+  "timeout": 120,
+  "scoring": "binary",
+  "metrics": ["correctness", "cost", "duration", "token_efficiency"]
+}

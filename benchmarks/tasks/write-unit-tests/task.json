@@ -1,0 +1,10 @@
+{
+  "name": "write-unit-tests",
+  "description": "Write comprehensive unit tests for an untested Python module",
+  "category": "testing",
+  "capability": "tdd-workflow",
+  "difficulty": "basic",
+  "timeout": 120,
+  "scoring": "binary",
+  "metrics": ["correctness", "cost", "duration", "token_efficiency"]
+}
