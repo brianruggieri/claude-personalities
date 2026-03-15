@@ -4,3 +4,7 @@ _backups/
 *.swo
 *~
 _metrics/
+
+# Runtime state with PII — never commit
+home/.claude.json
+claude/fetch-claude-usage.swift

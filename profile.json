@@ -1,7 +1,7 @@
 {
 	"name": "opinionated",
 	"description": "Bleeding-edge developer setup with strong defaults and guardrails",
-	"author": "brianruggieri",
+	"author": "",
 	"category": "full-stack",
 	"tags": ["opinionated", "bleeding-edge", "guardrails", "design", "testing"],
 	"capabilities": [

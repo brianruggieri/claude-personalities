@@ -243,7 +243,7 @@ Create `profile.json` at repo root:
 {
 	"name": "main",
 	"description": "Full-featured daily driver with design, testing, and development skills",
-	"author": "brianruggieri",
+	"author": "",
 	"category": "full-stack",
 	"tags": ["design", "testing", "browser-automation", "code-review", "tdd"],
 	"capabilities": [
@@ -1028,7 +1028,7 @@ Create `profile.json`:
 {
 	"name": "blank",
 	"description": "Clean slate — machine environment only, no plugins, no preferences",
-	"author": "brianruggieri",
+	"author": "",
 	"category": "minimal",
 	"tags": ["minimal", "clean", "baseline"],
 	"capabilities": []
@@ -1060,7 +1060,7 @@ Create `profile.json`:
 {
 	"name": "opinionated",
 	"description": "Bleeding-edge developer setup with strong defaults and guardrails",
-	"author": "brianruggieri",
+	"author": "",
 	"category": "full-stack",
 	"tags": ["opinionated", "bleeding-edge", "guardrails", "design", "testing"],
 	"capabilities": [

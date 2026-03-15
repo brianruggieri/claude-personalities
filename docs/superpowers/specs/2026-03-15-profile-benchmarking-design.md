@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-15
 **Status:** Approved
-**Author:** brianruggieri + Claude
+**Author:** anonymous + Claude
 
 ## Problem
 
@@ -55,7 +55,7 @@ Every profile branch includes a `profile.json` at the repo root:
 {
   "name": "main",
   "description": "Full-featured daily driver with design, testing, and development skills",
-  "author": "brianruggieri",
+  "author": "anonymous",
   "category": "full-stack",
   "tags": ["design", "testing", "browser-automation", "code-review", "tdd"],
   "capabilities": [
@@ -320,7 +320,7 @@ Autonomous loops          —       ✓          ✗
 ```
 Profile: main (full-stack)
 "Full-featured daily driver with design, testing, and development skills"
-Author: brianruggieri
+Author: anonymous
 ══════════════════════════════════════════════════════════════════════════════════
 
 Token Breakdown (estimated per-turn overhead)
