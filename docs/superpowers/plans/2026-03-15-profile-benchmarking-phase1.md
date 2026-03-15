@@ -1,530 +1,305 @@
-#!/usr/bin/env bash
-set -euo pipefail
+# Profile Benchmarking Phase 1 Implementation Plan
 
-REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
-CLAUDE_DIR="$HOME/.claude"
-BACKUP_DIR="$REPO_DIR/_backups"
-PACKAGE_DIR="$REPO_DIR/claude"
-HOME_PACKAGE_DIR="$REPO_DIR/home"
+> **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-# Files/dirs inside ~/.claude/ that define personality
-MANAGED_ITEMS=(
-	"CLAUDE.md"
-	"settings.json"
-	"settings.local.json"
-	"MEMORY.md"
-	"keybindings.json"
-	"agents"
-	"skills"
-	"rules"
-	"commands"
-	"mcp.json"
-	"statusline-command.sh"
-	"statusline-config.txt"
-	"run-project-hook.sh"
-)
+**Goal:** Build the static profile profiler — `./setup.sh profile` with table, detail, and compare modes — that measures and compares Claude Code personality profiles across token overhead, plugin counts, capabilities, and cost estimates.
 
-# Files in ~/ (not ~/.claude/) that define personality
-HOME_MANAGED_ITEMS=(
-)
+**Architecture:** All profiler logic lives in `setup.sh` as new bash functions. JSON parsing uses inline `python3 -c "import json; ..."` (python3 ships with macOS, no pip packages needed). Data files (capabilities.json, plugin-metadata.json, pricing, etc.) are JSON at the repo root or in `benchmarks/`. Profile manifests (profile.json) are per-branch. Shared files (capabilities.json, plugin-metadata.json, benchmarks/) are always read from the `main` branch via `git show main:<file>` to avoid drift across branches.
 
-# Runtime/ephemeral items — never personality, never managed
-KNOWN_RUNTIME=(
-	"projects"
-	"history.jsonl"
-	"debug"
-	"debug.log"
-	"plans"
-	"todos"
-	"tasks"
-	"teams"
-	"sessions"
-	"session-env"
-	"shell-snapshots"
-	"file-history"
-	"paste-cache"
-	"telemetry"
-	"statsig"
-	".statsig"
-	"cache"
-	"backups"
-	"downloads"
-	"plugins"
-	"stats-cache.json"
-	".DS_Store"
-	".statusline-usage-cache"
-)
+**Tech Stack:** bash, git (`git show` for cross-branch reads), python3 (JSON parsing only)
 
-VERSION_FILE="$REPO_DIR/.claude-code-version"
+**Spec:** `docs/superpowers/specs/2026-03-15-profile-benchmarking-design.md`
 
-usage() {
-	cat <<EOF
-Usage: ./setup.sh <command>
+**Branch:** Work on `main`. Currently on `opinionated` — the implementer must commit or stash any uncommitted changes, then switch to main via `git checkout main` (NOT `./setup.sh use main` which disrupts symlinks).
 
-Profile management:
-  use <branch>    Switch to a profile (unlink, checkout, relink)
-  current         Print active profile name
-  list            List available profiles
-  status          Show symlink health for all managed items
+**Important constraints:**
+- Do NOT modify files in `claude/` or `home/` — those are profile content
+- Do NOT run `./setup.sh use` — it changes symlinks and disrupts the active session
+- All new commands are additions to `setup.sh`, not modifications to existing commands
+- Use tabs for indentation (matching existing setup.sh style)
+- The script uses `set -euo pipefail` — all Python calls MUST exit 0 even on error (wrap in try/except)
+- Pass data to Python via `sys.argv`, not bash string interpolation (prevents injection)
+- Use `shlex.quote()` for all string values output from Python to prevent shell injection
 
-Profiling:
-  profile                          Compare all profiles (tokens, plugins, capabilities)
-  profile --detail <branch>        Token breakdown and cost estimate for one profile
-  profile --compare <a> <b>        Side-by-side diff of two profiles
+**Security note:** The `_profile_gather` function outputs shell variable assignments that are `eval`'d. All string values MUST be escaped with `shlex.quote()` to prevent injection from malicious profile.json content.
 
-Setup:
-  backup          Back up current ~/.claude/ personality files
-  import          Import personality files from ~/.claude/ into this repo
+---
 
-Health:
-  doctor          Full health check (prereqs, symlinks, drift, version)
-  drift           Scan ~/.claude/ for unrecognized files
-  changelog       Fetch Claude Code changelog, filter for config changes
-  pin-version     Record current Claude Code version
+## Task 1: Create JSON Data Files
 
-EOF
+**Files:**
+- Create: `capabilities.json`
+- Create: `plugin-metadata.json`
+- Create: `benchmarks/base-overhead.json`
+- Create: `benchmarks/pricing.json`
+- Create: `profile.json`
+- Modify: `.gitignore`
+
+- [ ] **Step 1: Switch to main branch**
+
+```bash
+cd ~/git/claude_personalities
+git add -A && git stash
+git checkout main
+```
+
+Verify: `git branch --show-current` shows `main`.
+
+Note: `git stash pop` after all work is complete if you need to return to the previous state.
+
+- [ ] **Step 2: Create capabilities.json**
+
+Create `capabilities.json` at repo root. This is the shared capability vocabulary — maps capability names to the plugins/skills that provide them. Content is specified exactly in the spec (Section "Capability Registry").
+
+```json
+{
+	"frontend-design": {
+		"description": "Create and refine web UI components and pages",
+		"provided_by": [
+			{ "plugin": "frontend-design" },
+			{ "plugin": "impeccable" }
+		],
+		"benchmark_task": "create-react-component"
+	},
+	"tdd-workflow": {
+		"description": "Red-green-refactor test-driven development",
+		"provided_by": [
+			{ "plugin": "superpowers", "skill": "test-driven-development" }
+		],
+		"benchmark_task": "write-unit-tests"
+	},
+	"code-review": {
+		"description": "Automated code review for pull requests",
+		"provided_by": [
+			{ "plugin": "code-review" }
+		],
+		"benchmark_task": "review-code-diff"
+	},
+	"browser-testing": {
+		"description": "Headless browser automation for QA and testing",
+		"provided_by": [
+			{ "plugin": "playwright" }
+		],
+		"benchmark_task": null
+	},
+	"api-docs-lookup": {
+		"description": "Up-to-date library documentation lookup",
+		"provided_by": [
+			{ "plugin": "context7" }
+		],
+		"benchmark_task": null
+	},
+	"typescript-intelligence": {
+		"description": "TypeScript/JavaScript language server for code intelligence",
+		"provided_by": [
+			{ "plugin": "typescript-lsp" }
+		],
+		"benchmark_task": null
+	},
+	"design-polish": {
+		"description": "Design quality review, polish, and normalization",
+		"provided_by": [
+			{ "plugin": "impeccable" }
+		],
+		"benchmark_task": null
+	},
+	"autonomous-loops": {
+		"description": "Continuous iterative development loops",
+		"provided_by": [
+			{ "plugin": "ralph-loop" }
+		],
+		"benchmark_task": null
+	}
 }
+```
 
-# ─── Symlink engine ──────────────────────────────────────────────────────────
+Verify: `python3 -c "import json; json.load(open('capabilities.json')); print('valid')"` prints `valid`
 
-# Remove symlinks that point into THIS repo. Never touches real files.
-unlink_profile() {
-	# Items in ~/.claude/
-	for item in "${MANAGED_ITEMS[@]}"; do
-		local path="$CLAUDE_DIR/$item"
-		if [ -L "$path" ]; then
-			local target
-			target="$(readlink "$path")"
-			if [[ "$target" == "$PACKAGE_DIR"* ]]; then
-				rm "$path"
-			fi
-		fi
-	done
+- [ ] **Step 3: Create plugin-metadata.json**
 
-	# Items in ~/
-	for item in "${HOME_MANAGED_ITEMS[@]}"; do
-		local path="$HOME/$item"
-		if [ -L "$path" ]; then
-			local target
-			target="$(readlink "$path")"
-			if [[ "$target" == "$HOME_PACKAGE_DIR"* ]]; then
-				rm "$path"
-			fi
-		fi
-	done
+Create `plugin-metadata.json` at repo root. Contains manually maintained skill counts, MCP tool counts, and listing token estimates for each known plugin.
+
+```json
+{
+	"superpowers": {
+		"marketplace": "claude-plugins-official",
+		"skills": 22,
+		"mcp_tools": 0,
+		"listing_tokens": 880,
+		"description": "Core skills: TDD, debugging, collaboration patterns"
+	},
+	"impeccable": {
+		"marketplace": "impeccable",
+		"skills": 18,
+		"mcp_tools": 0,
+		"listing_tokens": 720,
+		"description": "Design vocabulary: polish, distill, audit, bolder, quieter"
+	},
+	"playwright": {
+		"marketplace": "claude-plugins-official",
+		"skills": 0,
+		"mcp_tools": 25,
+		"listing_tokens": 500,
+		"description": "Browser automation and testing"
+	},
+	"context7": {
+		"marketplace": "claude-plugins-official",
+		"skills": 0,
+		"mcp_tools": 2,
+		"listing_tokens": 40,
+		"description": "Library documentation lookup"
+	},
+	"code-review": {
+		"marketplace": "claude-plugins-official",
+		"skills": 1,
+		"mcp_tools": 0,
+		"listing_tokens": 40,
+		"description": "PR code review"
+	},
+	"ralph-loop": {
+		"marketplace": "claude-plugins-official",
+		"skills": 3,
+		"mcp_tools": 0,
+		"listing_tokens": 120,
+		"description": "Autonomous iterative loops"
+	},
+	"frontend-design": {
+		"marketplace": "claude-plugins-official",
+		"skills": 1,
+		"mcp_tools": 0,
+		"listing_tokens": 40,
+		"description": "Frontend design skill"
+	},
+	"typescript-lsp": {
+		"marketplace": "claude-plugins-official",
+		"skills": 0,
+		"mcp_tools": 0,
+		"lsp_servers": 1,
+		"listing_tokens": 20,
+		"description": "TypeScript language server"
+	}
 }
+```
 
-# Create symlinks. Warns on conflicts (real file blocking). Skips missing items.
-link_profile() {
-	local conflicts=0
+Verify: `python3 -c "import json; json.load(open('plugin-metadata.json')); print('valid')"` prints `valid`
 
-	# Items in ~/.claude/
-	for item in "${MANAGED_ITEMS[@]}"; do
-		local src="$PACKAGE_DIR/$item"
-		local dst="$CLAUDE_DIR/$item"
-		[ -e "$src" ] || continue
+- [ ] **Step 4: Create benchmarks directory and data files**
 
-		if [ -e "$dst" ] && [ ! -L "$dst" ]; then
-			echo "  ! conflict: $item exists as real file in ~/.claude/ (not overwriting)"
-			conflicts=$((conflicts + 1))
-			continue
-		fi
-		[ -L "$dst" ] && rm "$dst"
-		ln -s "$src" "$dst"
-	done
+```bash
+mkdir -p benchmarks
+```
 
-	# Items in ~/
-	for item in "${HOME_MANAGED_ITEMS[@]}"; do
-		local src="$HOME_PACKAGE_DIR/$item"
-		local dst="$HOME/$item"
-		[ -e "$src" ] || continue
+Create `benchmarks/base-overhead.json`:
 
-		if [ -e "$dst" ] && [ ! -L "$dst" ]; then
-			echo "  ! conflict: ~/$item exists as real file (not overwriting)"
-			conflicts=$((conflicts + 1))
-			continue
-		fi
-		[ -L "$dst" ] && rm "$dst"
-		ln -s "$src" "$dst"
-	done
-
-	if [ "$conflicts" -gt 0 ]; then
-		echo ""
-		echo "  $conflicts conflict(s). Run './setup.sh backup' first, then remove the real files."
-	fi
+```json
+{
+	"claude_code_version": "2.1.76",
+	"source": "https://github.com/Piebald-AI/claude-code-system-prompts",
+	"last_updated": "2026-03-15",
+	"base_tokens": {
+		"system_prompt_fragments": 3000,
+		"tool_descriptions": 8500,
+		"misc_overhead": 1500,
+		"total": 13000
+	},
+	"notes": "Tokens Claude Code injects regardless of profile configuration. Profile overhead is additive. Update when Claude Code releases a new version with significant prompt changes."
 }
+```
 
-# ─── Commands ────────────────────────────────────────────────────────────────
+Create `benchmarks/pricing.json`:
 
-cmd_use() {
-	local branch="${1:-}"
-	if [ -z "$branch" ]; then
-		echo "usage: ./setup.sh use <branch>"
-		return 1
-	fi
-
-	# Check for dirty working tree before doing anything
-	local dirty
-	dirty="$(git -C "$REPO_DIR" status --porcelain 2>/dev/null)"
-	if [ -n "$dirty" ]; then
-		echo "Uncommitted changes in profile repo. Commit or stash before switching."
-		echo ""
-		git -C "$REPO_DIR" status --short
-		return 1
-	fi
-
-	local prev_branch
-	prev_branch="$(git -C "$REPO_DIR" branch --show-current 2>/dev/null || echo "")"
-
-	# Unlink current profile
-	unlink_profile
-
-	# Attempt checkout
-	if ! git -C "$REPO_DIR" checkout "$branch" 2>/dev/null; then
-		echo "Failed to checkout branch '$branch'."
-		# Re-link previous profile to avoid leaving user with no symlinks
-		if [ -n "$prev_branch" ]; then
-			git -C "$REPO_DIR" checkout "$prev_branch" 2>/dev/null
-			link_profile
-			echo "Restored previous profile: $prev_branch"
-		fi
-		return 1
-	fi
-
-	# Link new profile
-	link_profile
-	echo "Switched to profile: $branch"
-}
-
-cmd_current() {
-	git -C "$REPO_DIR" branch --show-current 2>/dev/null || echo "none (detached HEAD)"
-}
-
-cmd_list() {
-	local current
-	current="$(git -C "$REPO_DIR" branch --show-current 2>/dev/null || echo "")"
-	git -C "$REPO_DIR" branch --list --no-color 2>/dev/null | while read -r line; do
-		local name
-		name="$(echo "$line" | sed 's/^[* ] //')"
-		if [ "$name" = "$current" ]; then
-			echo "* $name (active)"
-		else
-			echo "  $name"
-		fi
-	done
-}
-
-cmd_backup() {
-	local timestamp
-	timestamp="$(date +%Y%m%d-%H%M%S)"
-	local dest="$BACKUP_DIR/$timestamp"
-	mkdir -p "$dest"
-
-	local count=0
-
-	# Backup ~/.claude/ items
-	for item in "${MANAGED_ITEMS[@]}"; do
-		local src="$CLAUDE_DIR/$item"
-		if [ -e "$src" ] || [ -L "$src" ]; then
-			if [ -L "$src" ]; then
-				# Copy the symlink target, not the symlink itself
-				cp -a "$(readlink "$src")" "$dest/$item" 2>/dev/null || cp -a "$src" "$dest/$item"
-			else
-				cp -a "$src" "$dest/$item"
-			fi
-			count=$((count + 1))
-		fi
-	done
-
-	# Backup ~/ items
-	mkdir -p "$dest/_home"
-	for item in "${HOME_MANAGED_ITEMS[@]}"; do
-		local src="$HOME/$item"
-		if [ -e "$src" ] || [ -L "$src" ]; then
-			if [ -L "$src" ]; then
-				cp -a "$(readlink "$src")" "$dest/_home/$item" 2>/dev/null || cp -a "$src" "$dest/_home/$item"
-			else
-				cp -a "$src" "$dest/_home/$item"
-			fi
-			count=$((count + 1))
-		fi
-	done
-
-	echo "Backed up $count items to _backups/$timestamp/"
-}
-
-cmd_import() {
-	mkdir -p "$PACKAGE_DIR"
-	mkdir -p "$HOME_PACKAGE_DIR"
-	local count=0
-
-	# Import ~/.claude/ items
-	for item in "${MANAGED_ITEMS[@]}"; do
-		local src="$CLAUDE_DIR/$item"
-		local dst="$PACKAGE_DIR/$item"
-
-		if [ -e "$src" ]; then
-			# Skip if already a symlink pointing into this repo
-			if [ -L "$src" ]; then
-				local target
-				target="$(readlink "$src")"
-				if [[ "$target" == "$PACKAGE_DIR"* ]]; then
-					echo "  skip $item (already linked to this repo)"
-					continue
-				fi
-			fi
-
-			cp -a "$src" "$dst"
-			echo "  imported $item"
-			count=$((count + 1))
-		fi
-	done
-
-	# Import ~/ items
-	for item in "${HOME_MANAGED_ITEMS[@]}"; do
-		local src="$HOME/$item"
-		local dst="$HOME_PACKAGE_DIR/$item"
-
-		if [ -e "$src" ]; then
-			if [ -L "$src" ]; then
-				local target
-				target="$(readlink "$src")"
-				if [[ "$target" == "$HOME_PACKAGE_DIR"* ]]; then
-					echo "  skip ~/$item (already linked to this repo)"
-					continue
-				fi
-			fi
-
-			cp -a "$src" "$dst"
-			echo "  imported ~/$item"
-			count=$((count + 1))
-		fi
-	done
-
-	echo ""
-	echo "Imported $count items."
-	echo ""
-	echo "Next steps:"
-	echo "  git add -A && git commit -m 'profile: base (imported from current config)'"
-	echo "  ./setup.sh use main  # activate symlinks"
-}
-
-cmd_status() {
-	echo "Profile: $(cmd_current)"
-	echo ""
-	echo "~/.claude/ items:"
-
-	for item in "${MANAGED_ITEMS[@]}"; do
-		local path="$CLAUDE_DIR/$item"
-		if [ -L "$path" ]; then
-			local target
-			target="$(readlink "$path")"
-			if [[ "$target" == "$PACKAGE_DIR"* ]]; then
-				printf "  + %-28s linked\n" "$item"
-			else
-				printf "  ? %-28s linked (elsewhere: %s)\n" "$item" "$target"
-			fi
-		elif [ -e "$path" ]; then
-			printf "  ! %-28s real file (not managed)\n" "$item"
-		else
-			printf "  - %-28s absent\n" "$item"
-		fi
-	done
-
-	echo ""
-	echo "~/ items:"
-
-	for item in "${HOME_MANAGED_ITEMS[@]}"; do
-		local path="$HOME/$item"
-		if [ -L "$path" ]; then
-			local target
-			target="$(readlink "$path")"
-			if [[ "$target" == "$HOME_PACKAGE_DIR"* ]]; then
-				printf "  + %-28s linked\n" "$item"
-			else
-				printf "  ? %-28s linked (elsewhere: %s)\n" "$item" "$target"
-			fi
-		elif [ -e "$path" ]; then
-			printf "  ! %-28s real file (not managed)\n" "$item"
-		else
-			printf "  - %-28s absent\n" "$item"
-		fi
-	done
-}
-
-cmd_doctor() {
-	echo "=== Prerequisites ==="
-	echo ""
-
-	local ok=1
-	if command -v git &>/dev/null; then
-		echo "  + git $(git --version | cut -d' ' -f3)"
-	else
-		echo "  ! git not found" && ok=0
-	fi
-
-	if [ -d "$CLAUDE_DIR" ]; then
-		echo "  + ~/.claude/ exists"
-	else
-		echo "  ! ~/.claude/ not found" && ok=0
-	fi
-
-	local cc_version=""
-	if command -v claude &>/dev/null; then
-		cc_version="$(claude --version 2>/dev/null | head -1 || echo "")"
-		echo "  + claude CLI: $cc_version"
-	else
-		echo "  ? claude CLI not in PATH"
-	fi
-
-	echo ""
-	echo "=== Profile Status ==="
-	echo ""
-
-	cmd_status
-
-	echo ""
-	echo "=== Drift Detection ==="
-	echo ""
-
-	cmd_drift
-
-	# Version tracking
-	if [ -n "$cc_version" ] && [ -f "$VERSION_FILE" ]; then
-		local last_version
-		last_version="$(cat "$VERSION_FILE")"
-		if [ "$last_version" != "$cc_version" ]; then
-			echo ""
-			echo "=== Version Change ==="
-			echo ""
-			echo "  Claude Code updated: $last_version -> $cc_version"
-			echo "  Run './setup.sh changelog' to check for config changes."
-		fi
-	elif [ -n "$cc_version" ] && [ ! -f "$VERSION_FILE" ]; then
-		echo ""
-		echo "  Tip: Run './setup.sh pin-version' to start tracking version changes."
-	fi
-
-	echo ""
-	if [ "$ok" -eq 1 ]; then
-		echo "Done."
-	else
-		echo "Fix prerequisite issues above."
-	fi
-}
-
-cmd_drift() {
-	if [ ! -d "$CLAUDE_DIR" ]; then
-		echo "  No ~/.claude/ directory found."
-		return
-	fi
-
-	local unknown_count=0
-	local unknown_items=()
-
-	for entry in "$CLAUDE_DIR"/*; do
-		[ -e "$entry" ] || continue
-		local name
-		name="$(basename "$entry")"
-
-		# Skip hidden files
-		[[ "$name" == .* ]] && continue
-
-		# Check MANAGED_ITEMS
-		local is_managed=0
-		for m in "${MANAGED_ITEMS[@]}"; do
-			if [ "$name" = "$m" ]; then
-				is_managed=1
-				break
-			fi
-		done
-		[ "$is_managed" -eq 1 ] && continue
-
-		# Check KNOWN_RUNTIME
-		local is_runtime=0
-		for r in "${KNOWN_RUNTIME[@]}"; do
-			if [ "$name" = "$r" ]; then
-				is_runtime=1
-				break
-			fi
-		done
-		[ "$is_runtime" -eq 1 ] && continue
-
-		unknown_items+=("$name")
-		unknown_count=$((unknown_count + 1))
-	done
-
-	if [ "$unknown_count" -eq 0 ]; then
-		echo "  + No unknown files in ~/.claude/"
-	else
-		echo "  ! Found $unknown_count unrecognized item(s) in ~/.claude/:"
-		echo ""
-		for item in "${unknown_items[@]}"; do
-			local path="$CLAUDE_DIR/$item"
-			if [ -d "$path" ]; then
-				local fcount
-				fcount="$(find "$path" -type f 2>/dev/null | wc -l | tr -d ' ')"
-				printf "    %-28s  (dir, %s files)\n" "$item/" "$fcount"
-			else
-				local size
-				size="$(wc -c < "$path" 2>/dev/null | tr -d ' ')"
-				printf "    %-28s  (file, %s bytes)\n" "$item" "$size"
-			fi
-		done
-		echo ""
-		echo "  Add to MANAGED_ITEMS or KNOWN_RUNTIME in setup.sh."
-	fi
-}
-
-cmd_changelog() {
-	local CHANGELOG_URL="https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md"
-
-	echo "Fetching Claude Code changelog..."
-	echo ""
-
-	local tmpfile
-	tmpfile="$(mktemp)"
-	if ! curl -fsSL "$CHANGELOG_URL" -o "$tmpfile" 2>/dev/null; then
-		echo "  ! Failed to fetch changelog."
-		rm -f "$tmpfile"
-		return 1
-	fi
-
-	echo "Config-relevant changes (last 10 versions):"
-	echo ""
-
-	awk '
-		/^## [0-9]/ { version_count++; current_version=$0 }
-		version_count > 10 { exit }
-		version_count >= 1 {
-			if ($0 ~ /^## [0-9]/) {
-				pending_header = $0
-				printed_header = 0
-			} else if (tolower($0) ~ /settings|claude\.md|directory|configuration|breaking|deprecated|agents|skills|rules|commands|mcp|hooks|permissions|memory|plugin|keybindings/) {
-				if (!printed_header) {
-					print pending_header
-					printed_header = 1
-				}
-				print $0
-			}
+```json
+{
+	"last_updated": "2026-03-15",
+	"source": "https://platform.claude.com/docs/en/about-claude/pricing",
+	"models": {
+		"opus-4.6": {
+			"cache_read_per_mtok": 0.50,
+			"cache_miss_per_mtok": 5.00,
+			"output_per_mtok": 25.00
+		},
+		"sonnet-4.6": {
+			"cache_read_per_mtok": 0.30,
+			"cache_miss_per_mtok": 3.00,
+			"output_per_mtok": 15.00
+		},
+		"haiku-4.5": {
+			"cache_read_per_mtok": 0.10,
+			"cache_miss_per_mtok": 1.00,
+			"output_per_mtok": 5.00
 		}
-	' "$tmpfile" | head -80
-
-	echo ""
-	rm -f "$tmpfile"
+	},
+	"default_model": "opus-4.6"
 }
+```
 
-cmd_pin_version() {
-	if ! command -v claude &>/dev/null; then
-		echo "Claude CLI not found."
-		return 1
-	fi
-	local version
-	version="$(claude --version 2>/dev/null | head -1)"
-	echo "$version" > "$VERSION_FILE"
-	echo "Pinned: $version"
+Verify: Both files parse as valid JSON.
+
+- [ ] **Step 5: Create profile.json for main branch**
+
+Create `profile.json` at repo root:
+
+```json
+{
+	"name": "main",
+	"description": "Full-featured daily driver with design, testing, and development skills",
+	"author": "",
+	"category": "full-stack",
+	"tags": ["design", "testing", "browser-automation", "code-review", "tdd"],
+	"capabilities": [
+		"frontend-design",
+		"tdd-workflow",
+		"code-review",
+		"browser-testing",
+		"api-docs-lookup",
+		"typescript-intelligence",
+		"design-polish",
+		"autonomous-loops"
+	]
 }
+```
 
+- [ ] **Step 6: Add _metrics/ to .gitignore**
+
+Append `_metrics/` to the existing `.gitignore` file. The file currently contains:
+
+```
+_backups/
+.DS_Store
+*.swp
+*.swo
+*~
+```
+
+Add `_metrics/` as a new line at the end.
+
+- [ ] **Step 7: Commit data files**
+
+```bash
+git add capabilities.json plugin-metadata.json benchmarks/ profile.json .gitignore
+git commit -m "Add profiler data files and profile manifest for main"
+```
+
+---
+
+## Task 2: Write Profiler Core in setup.sh
+
+**Files:**
+- Modify: `setup.sh` (add all profiler functions after existing commands, before dispatch section)
+
+This task adds ALL profiler functions to setup.sh: data gathering, display (table/detail/compare), dispatch, and usage text update.
+
+**Key safety patterns used throughout:**
+- Python receives data via `sys.argv` (never via bash string interpolation into Python source)
+- Python uses `shlex.quote()` for all string values it outputs
+- Python is wrapped in try/except and always exits 0
+- `eval` only processes the sanitized output
+
+- [ ] **Step 1: Add all profiler functions to setup.sh**
+
+Insert the entire profiler section between the `cmd_pin_version` function and the `# ─── Dispatch` section. The code below is the complete profiler implementation:
+
+```bash
 # ─── Profiler ─────────────────────────────────────────────────────────────────
 
 # Gather profile metrics for a branch. Outputs eval-able key=value pairs.
@@ -753,7 +528,7 @@ _profile_table() {
 	echo ""
 	printf "  %-14s %-12s %8s  %7s  %6s  %9s  %11s\n" \
 		"Profile" "Category" "Tokens†" "Plugins" "Skills" "MCP Tools" "User Skills"
-	printf '  '; printf '─%.0s' {1..76}; echo ""
+	printf '  ─%.0s' {1..76}; echo ""
 
 	for ((i=0; i<count; i++)); do
 		local tok_fmt="${tokens[$i]}"
@@ -784,7 +559,7 @@ PYEOF
 	if [ -n "$cap_names" ]; then
 		echo ""
 		echo "  Capability Matrix"
-		printf '  '; printf '─%.0s' {1..76}; echo ""
+		printf '  ─%.0s' {1..76}; echo ""
 
 		# Header row with branch names
 		printf "  %-24s" ""
@@ -868,7 +643,7 @@ _profile_detail() {
 		printf "  %-38s %5d tokens   %s %3d%%\n" "${labels[$i]}" "$val" "$bar" "$pct"
 	done
 
-	printf '  '; printf '─%.0s' {1..76}; echo ""
+	printf '  ─%.0s' {1..76}; echo ""
 	printf "  %-38s %5d tokens\n" "TOTAL (profile overhead)" "$P_TOTAL_TOKENS"
 	printf "  %-38s %5d tokens\n" "+ Base CC overhead" "$base_overhead"
 	printf "  %-38s %5d tokens\n" "= Estimated total prompt" "$total_with_base"
@@ -1004,17 +779,16 @@ PYEOF
 	# Capability diff
 	echo ""
 	local only_a="" only_b=""
-	local -a caps_a=() caps_b=()
-	[ -n "$a_caps" ] && IFS=',' read -ra caps_a <<< "$a_caps"
-	[ -n "$b_caps" ] && IFS=',' read -ra caps_b <<< "$b_caps"
+	IFS=',' read -ra caps_a <<< "$a_caps"
+	IFS=',' read -ra caps_b <<< "$b_caps"
 
-	for cap in ${caps_a[@]+"${caps_a[@]}"}; do
+	for cap in "${caps_a[@]}"; do
 		[ -z "$cap" ] && continue
 		if ! echo ",$b_caps," | grep -q ",$cap,"; then
 			only_a="${only_a:+$only_a, }$cap"
 		fi
 	done
-	for cap in ${caps_b[@]+"${caps_b[@]}"}; do
+	for cap in "${caps_b[@]}"; do
 		[ -z "$cap" ] && continue
 		if ! echo ",$a_caps," | grep -q ",$cap,"; then
 			only_b="${only_b:+$only_b, }$cap"
@@ -1080,9 +854,47 @@ cmd_profile() {
 		compare) _profile_compare "$compare_a" "$compare_b" ;;
 	esac
 }
+```
 
-# ─── Dispatch ────────────────────────────────────────────────────────────────
+- [ ] **Step 2: Update the usage() function**
 
+Replace the existing `usage()` function body to add the Profiling section:
+
+```bash
+usage() {
+	cat <<EOF
+Usage: ./setup.sh <command>
+
+Profile management:
+  use <branch>    Switch to a profile (unlink, checkout, relink)
+  current         Print active profile name
+  list            List available profiles
+  status          Show symlink health for all managed items
+
+Profiling:
+  profile                          Compare all profiles (tokens, plugins, capabilities)
+  profile --detail <branch>        Token breakdown and cost estimate for one profile
+  profile --compare <a> <b>        Side-by-side diff of two profiles
+
+Setup:
+  backup          Back up current ~/.claude/ personality files
+  import          Import personality files from ~/.claude/ into this repo
+
+Health:
+  doctor          Full health check (prereqs, symlinks, drift, version)
+  drift           Scan ~/.claude/ for unrecognized files
+  changelog       Fetch Claude Code changelog, filter for config changes
+  pin-version     Record current Claude Code version
+
+EOF
+}
+```
+
+- [ ] **Step 3: Update the case dispatch**
+
+In the `case "${1:-}" in` block at the bottom of setup.sh, add the `profile` case. The updated dispatch block should be:
+
+```bash
 case "${1:-}" in
 	use)          cmd_use "${2:-}" ;;
 	current)      cmd_current ;;
@@ -1097,3 +909,213 @@ case "${1:-}" in
 	profile)      shift; cmd_profile "$@" ;;
 	*)            usage ;;
 esac
+```
+
+Note: The `profile` case uses `shift` then passes `"$@"` so that `cmd_profile` receives the remaining arguments.
+
+- [ ] **Step 4: Commit all setup.sh changes**
+
+```bash
+git add setup.sh
+git commit -m "Add profile command with table, detail, and compare modes"
+```
+
+---
+
+## Task 3: Verify All Modes Work
+
+**Files:** None created — this is verification only.
+
+- [ ] **Step 1: Test default table mode**
+
+```bash
+cd ~/git/claude_personalities
+./setup.sh profile
+```
+
+Expected: Table with 3 rows (blank, main, opinionated), capability matrix below. Verify:
+- blank shows 0 plugins, 0 skills, category may show "unknown" if no profile.json on blank yet (that's correct — Task 4 adds it)
+- main shows 8 plugins, non-zero skills, "full-stack" category
+- Capability matrix shows ✓/— per profile
+
+- [ ] **Step 2: Test detail mode**
+
+```bash
+./setup.sh profile --detail main
+```
+
+Expected: Token breakdown with bar chart, cost estimate, plugin inventory, user skills list, capabilities list. Verify:
+- Token total is reasonable (should be ~4,000-6,000)
+- Cost estimate shows dollar amounts
+- All 8 plugins listed with skill/tool counts
+
+```bash
+./setup.sh profile --detail blank
+```
+
+Expected: Minimal profile — 0 plugins, low token count. Category may show "unknown" (no profile.json yet).
+
+- [ ] **Step 3: Test compare mode**
+
+```bash
+./setup.sh profile --compare main blank
+```
+
+Expected: Side-by-side with deltas. Token delta should be positive (main > blank). Capabilities diff should show all capabilities only in main.
+
+- [ ] **Step 4: Test error handling**
+
+```bash
+./setup.sh profile --detail
+# Expected: "usage: ./setup.sh profile --detail <branch>"
+
+./setup.sh profile --compare main
+# Expected: "usage: ./setup.sh profile --compare <branch-a> <branch-b>"
+
+./setup.sh profile --detail nonexistent
+# Expected: "Branch 'nonexistent' not found."
+```
+
+- [ ] **Step 5: Test usage text**
+
+```bash
+./setup.sh
+```
+
+Expected: Usage text now includes the "Profiling:" section with `profile` commands.
+
+- [ ] **Step 6: Fix any issues found and commit**
+
+If any issues were found during verification, fix them and commit:
+
+```bash
+git add setup.sh
+git commit -m "Fix profiler issues found during verification"
+```
+
+Only commit if there are actual changes. Skip if everything worked.
+
+---
+
+## Task 4: Add profile.json to Other Branches
+
+**Files:**
+- Create: `profile.json` on `blank` branch
+- Create: `profile.json` on `opinionated` branch
+- Propagate shared files (capabilities.json, plugin-metadata.json, benchmarks/) to both branches
+- Propagate setup.sh changes to both branches
+
+**Important:** This task requires switching branches. The symlinks in `~/.claude/` point into this repo's `claude/` directory — when you `git checkout blank`, the files in `claude/` change, which changes what the symlinks resolve to. This is temporary and will be restored when you return to the original branch. Do NOT use `./setup.sh use` — just raw `git checkout`.
+
+- [ ] **Step 1: Ensure main is clean**
+
+```bash
+cd ~/git/claude_personalities
+git status
+```
+
+All changes from Tasks 1-3 should be committed. If not, commit them first.
+
+- [ ] **Step 2: Add profile.json and shared files to blank branch**
+
+```bash
+git checkout blank
+```
+
+Create `profile.json`:
+
+```json
+{
+	"name": "blank",
+	"description": "Clean slate — machine environment only, no plugins, no preferences",
+	"author": "",
+	"category": "minimal",
+	"tags": ["minimal", "clean", "baseline"],
+	"capabilities": []
+}
+```
+
+Copy shared infrastructure and setup.sh from main:
+
+```bash
+git checkout main -- capabilities.json plugin-metadata.json benchmarks/ .gitignore setup.sh
+```
+
+Commit:
+
+```bash
+git add profile.json capabilities.json plugin-metadata.json benchmarks/ .gitignore setup.sh
+git commit -m "Add profile manifest and shared profiler infrastructure"
+```
+
+- [ ] **Step 3: Add profile.json and shared files to opinionated branch**
+
+```bash
+git checkout opinionated
+```
+
+Create `profile.json`:
+
+```json
+{
+	"name": "opinionated",
+	"description": "Bleeding-edge developer setup with strong defaults and guardrails",
+	"author": "",
+	"category": "full-stack",
+	"tags": ["opinionated", "bleeding-edge", "guardrails", "design", "testing"],
+	"capabilities": [
+		"frontend-design",
+		"tdd-workflow",
+		"code-review",
+		"browser-testing",
+		"api-docs-lookup",
+		"typescript-intelligence",
+		"design-polish",
+		"autonomous-loops"
+	]
+}
+```
+
+Copy shared infrastructure and setup.sh from main:
+
+```bash
+git checkout main -- capabilities.json plugin-metadata.json benchmarks/ .gitignore setup.sh
+```
+
+Commit:
+
+```bash
+git add profile.json capabilities.json plugin-metadata.json benchmarks/ .gitignore setup.sh
+git commit -m "Add profile manifest and shared profiler infrastructure"
+```
+
+- [ ] **Step 4: Return to main branch**
+
+```bash
+git checkout main
+```
+
+Verify: `git branch --show-current` shows `main`.
+
+- [ ] **Step 5: Final verification — cross-branch profiling**
+
+```bash
+./setup.sh profile
+```
+
+Expected: All three profiles now show correct categories and capabilities:
+- blank: "minimal" category, 0 capabilities, 0 plugins
+- main: "full-stack" category, 8 capabilities, 8 plugins
+- opinionated: "full-stack" category, 8 capabilities, 8 plugins
+
+```bash
+./setup.sh profile --compare main blank
+```
+
+Expected: Clear delta showing main's overhead vs blank's minimal footprint.
+
+```bash
+./setup.sh profile --detail opinionated
+```
+
+Expected: Full breakdown matching main (since opinionated currently has same profile content as main).

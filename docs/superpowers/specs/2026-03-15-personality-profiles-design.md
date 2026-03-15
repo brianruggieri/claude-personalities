@@ -21,10 +21,7 @@ claude/
 └── settings.json       # {"permissions":{"defaultMode":"default"},"enabledPlugins":{}}
 ```
 
-**`~/.claude.json` override:**
-```json
-{}
-```
+**Note:** `~/.claude.json` is runtime state managed by Claude Code, not a personality file. It is not tracked in this repo.
 
 ### `base` — Daily driver
 
@@ -39,7 +36,6 @@ claude/
 ├── MEMORY.md                 # Accumulated memory
 ├── statusline-command.sh     # Custom status line script
 ├── statusline-config.txt     # Status line display config
-├── fetch-claude-usage.swift  # Usage tracking script
 ├── run-project-hook.sh       # Custom hook script
 └── skills/
     ├── exa-search/           # Custom skill
@@ -51,8 +47,6 @@ claude/
         ├── retro
         └── ... (full suite with symlinks)
 ```
-
-**`~/.claude.json`:** Current file as-is (MCP server config).
 
 ## Managed Items
 
@@ -74,14 +68,7 @@ Two categories based on filesystem location:
 | `mcp.json` | file | User-level MCP config (inside ~/.claude/) |
 | `statusline-command.sh` | file | Custom statusline script |
 | `statusline-config.txt` | file | Statusline display settings |
-| `fetch-claude-usage.swift` | file | Usage tracking script |
 | `run-project-hook.sh` | file | Custom hook script |
-
-### Inside `~/` (special-cased)
-
-| Item | Type | Notes |
-|------|------|-------|
-| `.claude.json` | file | User-scoped MCP servers, auto-update prefs |
 
 ### NOT managed (runtime/ephemeral)
 
@@ -108,8 +95,7 @@ claude_personalities/           # The git repo
 │   ├── settings.json
 │   ├── ... (varies per branch)
 │   └── skills/
-├── home/                       # Files targeting ~/ (not ~/.claude/)
-│   └── .claude.json
+├── home/                       # Files targeting ~/ (currently empty)
 ├── _backups/                   # Timestamped backups (gitignored)
 ├── hooks/
 │   └── drift-check-hook.sh    # Optional SessionStart hook
@@ -201,7 +187,7 @@ claude-profile() {
 - Never overwrite real files — warn and require manual resolution
 - Only remove symlinks that point back to this repo (`readlink` check)
 - Backup before first import
-- `.claude.json` in `~/` requires extra care — backup explicitly
+- Runtime state files require care — backup before modifying
 
 ## Future-proofing
 
@@ -215,8 +201,7 @@ When Claude Code ships native profile support (#7075), this tool becomes a migra
 2. Rewrite `setup.sh` with symlink engine + all commands (replaces all stow references)
 3. Update `MANAGED_ITEMS` array to the 14-item list from this spec
 4. Update `KNOWN_RUNTIME` array to match the full runtime list from this spec
-5. Create `home/` directory structure for `~/.claude.json`
-6. Clean up legacy files from prior exploration (blog-post.md, old watch-claude-code.yml, old drift-check-hook.sh)
+5. Clean up legacy files from prior exploration (blog-post.md, old watch-claude-code.yml, old drift-check-hook.sh)
 7. Clean up leftover report artifacts from `~/.claude/` (BATCH*.md, API-REMOVAL-COMPLETE.md, etc.)
 8. Import current config as `base` profile on `main` branch using `./setup.sh import`
 9. Commit as base profile
