@@ -1273,23 +1273,11 @@ _benchmark_run_task() {
 	local task_name
 	task_name="$(basename "$task_dir")"
 
-	# Read task timeout
-	local timeout
-	timeout="$(python3 -c "
-import json, sys
-try:
-    with open(sys.argv[1]) as f:
-        print(json.load(f).get('timeout', 120))
-except Exception:
-    print('120')
-" "$task_dir/task.json")"
+	echo "  Running: $task_name"
 
-	echo "  Running: $task_name (timeout: ${timeout}s)"
-
-	# Create temp working directory and resolve to real path (macOS /var -> /private/var)
+	# Create temp working directory
 	local tmpdir
 	tmpdir="$(mktemp -d)"
-	tmpdir="$(cd "$tmpdir" && pwd -P)"
 
 	# Clean up on exit
 	trap "rm -r '$tmpdir' 2>/dev/null || true" RETURN
@@ -1304,22 +1292,17 @@ except Exception:
 		cp -a "$task_dir/expected" "$tmpdir/_expected"
 	fi
 
-	# Run claude in print mode
+	# Run claude in print mode with JSON output for metrics capture
 	local prompt
 	prompt="$(cat "$task_dir/prompt.md")"
 	local claude_exit=0
-	local start_time
-	start_time="$(date +%s)"
+	local claude_output_file="$tmpdir/_claude_output.json"
 
-	(cd "$tmpdir" && timeout "$timeout" claude -p \
+	(cd "$tmpdir" && claude -p \
 		--dangerously-skip-permissions \
-		--no-session-persistence \
+		--output-format json \
 		--max-budget-usd 5 \
-		"$prompt" > /dev/null 2>&1) || claude_exit=$?
-
-	local end_time
-	end_time="$(date +%s)"
-	local wall_seconds=$(( end_time - start_time ))
+		"$prompt" > "$claude_output_file" 2>/dev/null) || claude_exit=$?
 
 	# Run verification
 	local passed=false
@@ -1328,28 +1311,26 @@ except Exception:
 		verify_output="$("$task_dir/verify.sh" "$tmpdir" 2>&1)" && passed=true || passed=false
 	fi
 
-	# Capture metrics from ~/.claude.json for the tmpdir project
+	# Extract metrics from claude JSON output and write result
 	local results_dir="$REPO_DIR/_metrics/benchmarks/$profile/$task_name"
 	mkdir -p "$results_dir"
 	local timestamp
 	timestamp="$(date -u +%Y%m%d-%H%M%S)"
 
-	python3 - "$HOME/.claude.json" "$profile" "$task_name" "$tmpdir" \
-		"$results_dir/${timestamp}.json" "$passed" "$wall_seconds" <<'PYEOF'
-import json, sys, os
+	python3 - "$claude_output_file" "$profile" "$task_name" \
+		"$results_dir/${timestamp}.json" "$passed" <<'PYEOF'
+import json, sys
 from datetime import datetime, timezone
 
 try:
-    claude_json_path = sys.argv[1]
+    claude_output_path = sys.argv[1]
     profile = sys.argv[2]
     task_name = sys.argv[3]
-    tmpdir = sys.argv[4]
-    out_path = sys.argv[5]
-    passed = sys.argv[6] == 'true'
-    wall_seconds = int(sys.argv[7])
+    out_path = sys.argv[4]
+    passed = sys.argv[5] == 'true'
 
     cost = 0
-    duration = wall_seconds
+    duration = 0
     input_tokens = 0
     output_tokens = 0
     cache_read = 0
@@ -1357,21 +1338,18 @@ try:
     model = "unknown"
 
     try:
-        with open(claude_json_path, 'r') as f:
+        with open(claude_output_path, 'r') as f:
             data = json.load(f)
-        proj = data.get('projects', {}).get(tmpdir, {})
-        if proj:
-            cost = proj.get('lastCost', 0)
-            api_dur = proj.get('lastDuration', 0)
-            if api_dur > 0:
-                duration = round(api_dur / 1000)
-            input_tokens = proj.get('lastTotalInputTokens', 0)
-            output_tokens = proj.get('lastTotalOutputTokens', 0)
-            cache_creation = proj.get('lastTotalCacheCreationInputTokens', 0)
-            cache_read = proj.get('lastTotalCacheReadInputTokens', 0)
-            model_usage = proj.get('lastModelUsage', {})
-            if model_usage:
-                model = list(model_usage.keys())[0]
+        cost = data.get('total_cost_usd', 0)
+        duration = round(data.get('duration_ms', 0) / 1000)
+        usage = data.get('usage', {})
+        input_tokens = usage.get('input_tokens', 0)
+        output_tokens = usage.get('output_tokens', 0)
+        cache_read = usage.get('cache_read_input_tokens', 0)
+        cache_creation = usage.get('cache_creation_input_tokens', 0)
+        model_usage = data.get('modelUsage', {})
+        if model_usage:
+            model = list(model_usage.keys())[0]
     except Exception:
         pass
 
@@ -1397,18 +1375,17 @@ try:
 except Exception as e:
     # Write a fallback result so the runner always has something to report
     try:
-        out_path = sys.argv[5]
-        passed = sys.argv[6] == 'true'
         fallback = {
             'profile': sys.argv[2], 'task': sys.argv[3],
             'timestamp': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
-            'passed': passed, 'score': 1 if passed else 0,
-            'cost_usd': 0, 'duration_seconds': int(sys.argv[7]),
+            'passed': sys.argv[5] == 'true',
+            'score': 1 if sys.argv[5] == 'true' else 0,
+            'cost_usd': 0, 'duration_seconds': 0,
             'total_input_tokens': 0, 'total_output_tokens': 0,
             'cache_read_tokens': 0, 'cache_creation_tokens': 0,
             'model': 'unknown', 'error': str(e),
         }
-        with open(out_path, 'w') as f:
+        with open(sys.argv[4], 'w') as f:
             json.dump(fallback, f, indent=2)
             f.write('\n')
     except Exception:
