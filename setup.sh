@@ -11,7 +11,6 @@ HOME_PACKAGE_DIR="$REPO_DIR/home"
 MANAGED_ITEMS=(
 	"CLAUDE.md"
 	"settings.json"
-	"settings.local.json"
 	"MEMORY.md"
 	"keybindings.json"
 	"agents"
