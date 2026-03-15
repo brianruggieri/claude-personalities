@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 dir="$1"
+scorer="$(dirname "$0")/../../score-metrics.py"
 
 if [ ! -f "$dir/test_validators.py" ]; then
 	echo "FAIL: test_validators.py not found"
@@ -49,6 +50,9 @@ score=$(( test_count * 100 / 15 ))
 if [ "$score" -gt 100 ]; then
 	score=100
 fi
+
+# Run shared metrics (expected: fixture + generated test file)
+python3 "$scorer" "$dir" '["validators.py", "test_validators.py"]' "python" 2>/dev/null || true
 
 echo "PASS ($test_count tests)"
 echo "SCORE:$score"

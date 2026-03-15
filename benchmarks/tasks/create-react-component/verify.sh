@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 dir="$1"
+scorer="$(dirname "$0")/../../score-metrics.py"
 
 if [ ! -f "$dir/StatusBadge.jsx" ]; then
 	echo "FAIL: StatusBadge.jsx not found"
@@ -33,6 +34,11 @@ if echo "$content" | grep -q "status"; then
 fi
 
 score=$(( criteria * 100 / total ))
+
+# Run shared metrics
+python3 "$scorer" "$dir" '["StatusBadge.jsx"]' "jsx" 2>/dev/null || true
+
+echo "CONSTRAINTS:$criteria/$total"
 
 if [ "$criteria" -eq "$total" ]; then
 	echo "PASS"

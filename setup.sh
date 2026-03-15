@@ -1312,12 +1312,38 @@ _benchmark_run_task() {
 		verify_output="$("$task_dir/verify.sh" "$tmpdir" 2>&1)" && passed=true || passed=false
 	fi
 
-	# Extract SCORE from verify output (format: SCORE:<0-100>)
+	# Extract metrics from verify output
 	local quality_score
 	quality_score="$(echo "$verify_output" | grep -oE 'SCORE:[0-9]+' | tail -1 | cut -d: -f2)"
-	if [ -z "$quality_score" ]; then
-		[ "$passed" = "true" ] && quality_score=100 || quality_score=0
-	fi
+	[ -z "$quality_score" ] && { [ "$passed" = "true" ] && quality_score=100 || quality_score=0; }
+
+	local files_extra
+	files_extra="$(echo "$verify_output" | grep -oE 'FILES_EXTRA:[0-9]+' | cut -d: -f2)"
+	[ -z "$files_extra" ] && files_extra=0
+
+	local lines_generated
+	lines_generated="$(echo "$verify_output" | grep -oE 'LINES_GENERATED:[0-9]+' | cut -d: -f2)"
+	[ -z "$lines_generated" ] && lines_generated=0
+
+	local lint_issues
+	lint_issues="$(echo "$verify_output" | grep -oE 'LINT_ISSUES:[0-9]+' | cut -d: -f2)"
+	[ -z "$lint_issues" ] && lint_issues=0
+
+	local complexity_avg
+	complexity_avg="$(echo "$verify_output" | grep -oE 'COMPLEXITY_AVG:[0-9.]+' | cut -d: -f2)"
+	[ -z "$complexity_avg" ] && complexity_avg=0
+
+	local complexity_max
+	complexity_max="$(echo "$verify_output" | grep -oE 'COMPLEXITY_MAX:[0-9]+' | cut -d: -f2)"
+	[ -z "$complexity_max" ] && complexity_max=0
+
+	local max_func_length
+	max_func_length="$(echo "$verify_output" | grep -oE 'MAX_FUNCTION_LENGTH:[0-9]+' | cut -d: -f2)"
+	[ -z "$max_func_length" ] && max_func_length=0
+
+	local funcs_over_50
+	funcs_over_50="$(echo "$verify_output" | grep -oE 'FUNCTIONS_OVER_50:[0-9]+' | cut -d: -f2)"
+	[ -z "$funcs_over_50" ] && funcs_over_50=0
 
 	# Extract metrics from claude JSON output and write result
 	local results_dir="$REPO_DIR/_metrics/benchmarks/$profile/$task_name"
@@ -1326,7 +1352,9 @@ _benchmark_run_task() {
 	timestamp="$(date -u +%Y%m%d-%H%M%S)"
 
 	python3 - "$claude_output_file" "$profile" "$task_name" \
-		"$results_dir/${timestamp}.json" "$passed" "$quality_score" <<'PYEOF'
+		"$results_dir/${timestamp}.json" "$passed" "$quality_score" \
+		"$files_extra" "$lines_generated" "$lint_issues" \
+		"$complexity_avg" "$complexity_max" "$max_func_length" "$funcs_over_50" <<'PYEOF'
 import json, sys
 from datetime import datetime, timezone
 
@@ -1340,6 +1368,13 @@ try:
     out_path = sys.argv[4]
     passed = sys.argv[5] == 'true'
     quality_score = int(sys.argv[6])
+    files_extra = int(sys.argv[7])
+    lines_generated = int(sys.argv[8])
+    lint_issues = int(sys.argv[9])
+    complexity_avg = float(sys.argv[10])
+    complexity_max = int(sys.argv[11])
+    max_func_length = int(sys.argv[12])
+    funcs_over_50 = int(sys.argv[13])
 
     cost = 0
     duration = 0
@@ -1384,6 +1419,13 @@ try:
         'cache_creation_tokens': cache_creation,
         'cache_efficiency': cache_efficiency,
         'model': model,
+        'files_extra': files_extra,
+        'lines_generated': lines_generated,
+        'lint_issues': lint_issues,
+        'complexity_avg': complexity_avg,
+        'complexity_max': complexity_max,
+        'max_function_length': max_func_length,
+        'functions_over_50': funcs_over_50,
     }
 
     with open(out_path, 'w') as f:
@@ -1663,62 +1705,71 @@ try:
             if results:
                 all_results[p][t] = results
 
-    # Compute radar data per profile (6 axes, all 0-100, higher = better)
+    # Compute radar data per profile (8 axes, all 0-100, higher = better)
+    # Uses min-max scaling: best = 95, worst = 30, equal = 95
     radar_data = {}
-    max_cost = 0
-    max_dur = 0
-    max_tokens = 0
+    profile_avgs = {}  # {profile: {metric: avg_value}}
 
-    # First pass: find maxes for normalization
-    for p in profiles:
-        costs = []
-        durs = []
-        toks = []
-        for t, runs in all_results.get(p, {}).items():
-            r = runs[-1]
-            costs.append(r.get('cost_usd', 0))
-            durs.append(r.get('duration_seconds', 0))
-            toks.append(r.get('output_tokens_raw', r.get('total_output_tokens', 0)))
-        if costs:
-            avg_c = sum(costs) / len(costs)
-            if avg_c > max_cost:
-                max_cost = avg_c
-        if durs:
-            avg_d = sum(durs) / len(durs)
-            if avg_d > max_dur:
-                max_dur = avg_d
-        if toks:
-            avg_t = sum(toks) / len(toks)
-            if avg_t > max_tokens:
-                max_tokens = avg_t
+    FLOOR = 30  # worst score on radar
+    CEIL = 95   # best score on radar
 
+    def minmax_scale(values, invert=False):
+        """Scale values to FLOOR-CEIL range. If invert, lower raw = higher score."""
+        if not values:
+            return []
+        mn, mx = min(values), max(values)
+        if mn == mx:
+            return [CEIL] * len(values)
+        scaled = []
+        for v in values:
+            if invert:
+                norm = (mx - v) / (mx - mn)
+            else:
+                norm = (v - mn) / (mx - mn)
+            scaled.append(round(FLOOR + norm * (CEIL - FLOOR), 1))
+        return scaled
+
+    # First pass: compute per-profile averages
     for p in profiles:
         tasks_data = all_results.get(p, {})
         if not tasks_data:
             continue
-
         latest = [runs[-1] for runs in tasks_data.values()]
-        total_tasks = len(latest)
-
-        pass_rate = sum(1 for r in latest if r.get('passed', False)) * 100 / total_tasks if total_tasks else 0
-        avg_quality = sum(r.get('quality_score', 100 if r.get('passed') else 0) for r in latest) / total_tasks if total_tasks else 0
-        avg_cost = sum(r.get('cost_usd', 0) for r in latest) / total_tasks if total_tasks else 0
-        avg_dur = sum(r.get('duration_seconds', 0) for r in latest) / total_tasks if total_tasks else 0
-        avg_tokens = sum(r.get('output_tokens_raw', r.get('total_output_tokens', 0)) for r in latest) / total_tasks if total_tasks else 0
-        avg_cache = sum(r.get('cache_efficiency', 0) for r in latest) / total_tasks if total_tasks else 0
-
-        cost_eff = (1 - avg_cost / max_cost) * 100 if max_cost > 0 else 100
-        speed = (1 - avg_dur / max_dur) * 100 if max_dur > 0 else 100
-        token_eff = (1 - avg_tokens / max_tokens) * 100 if max_tokens > 0 else 100
-
-        radar_data[p] = {
-            'pass_rate': round(pass_rate, 1),
-            'quality': round(avg_quality, 1),
-            'cost_efficiency': round(max(0, cost_eff), 1),
-            'speed': round(max(0, speed), 1),
-            'token_efficiency': round(max(0, token_eff), 1),
-            'cache_efficiency': round(avg_cache * 100, 1),
+        total = len(latest)
+        profile_avgs[p] = {
+            'pass_rate': sum(1 for r in latest if r.get('passed', False)) * 100 / total,
+            'quality': sum(r.get('quality_score', 100 if r.get('passed') else 0) for r in latest) / total,
+            'cost': sum(r.get('cost_usd', 0) for r in latest) / total,
+            'duration': sum(r.get('duration_seconds', 0) for r in latest) / total,
+            'tokens': sum(r.get('output_tokens_raw', r.get('total_output_tokens', 0)) for r in latest) / total,
+            'cache': sum(r.get('cache_efficiency', 0) for r in latest) * 100 / total,
+            'lint': sum(r.get('lint_issues', 0) for r in latest) / total,
+            'complexity': sum(r.get('complexity_avg', 0) for r in latest) / total,
         }
+
+    active_profiles = [p for p in profiles if p in profile_avgs]
+
+    # Scale each metric across profiles
+    metrics_config = [
+        ('pass_rate', False),    # higher = better
+        ('quality', False),      # higher = better
+        ('cost', True),          # lower = better
+        ('duration', True),      # lower = better
+        ('tokens', True),        # lower = better
+        ('cache', False),        # higher = better
+        ('lint', True),          # lower = better
+        ('complexity', True),    # lower = better
+    ]
+    radar_labels = ['Pass Rate', 'Quality', 'Cost Efficiency', 'Speed',
+                    'Token Efficiency', 'Cache Efficiency', 'Code Cleanliness', 'Simplicity']
+
+    for metric, invert in metrics_config:
+        raw_values = [profile_avgs[p][metric] for p in active_profiles]
+        scaled = minmax_scale(raw_values, invert=invert)
+        for i, p in enumerate(active_profiles):
+            if p not in radar_data:
+                radar_data[p] = {}
+            radar_data[p][metric] = scaled[i]
 
     # Cost per task per profile (for bar chart)
     cost_data = {}
@@ -1758,19 +1809,22 @@ try:
                     'duration': r.get('duration_seconds', 0),
                     'output_tokens': r.get('output_tokens_raw', r.get('total_output_tokens', 0)),
                     'cache_efficiency': r.get('cache_efficiency', 0),
-                    'model': r.get('model', 'unknown'),
+                    'lint_issues': r.get('lint_issues', 0),
+                    'complexity': r.get('complexity_avg', 0),
+                    'files_extra': r.get('files_extra', 0),
+                    'lines_generated': r.get('lines_generated', 0),
                 })
 
     # Generate HTML
     radar_datasets_js = []
-    for i, p in enumerate(profiles):
-        if p not in radar_data:
-            continue
+    metric_keys = [m for m, _ in metrics_config]
+    for i, p in enumerate(active_profiles):
         c = get_color(p, i)
         d = radar_data[p]
+        vals = [d.get(k, 50) for k in metric_keys]
         radar_datasets_js.append(f"""{{
             label: '{html.escape(p)}',
-            data: [{d['pass_rate']}, {d['quality']}, {d['cost_efficiency']}, {d['speed']}, {d['token_efficiency']}, {d['cache_efficiency']}],
+            data: {json.dumps(vals)},
             backgroundColor: '{c["bg"]}',
             borderColor: '{c["border"]}',
             borderWidth: 2,
@@ -1842,6 +1896,8 @@ try:
     for row in table_rows:
         c = get_color(row['profile'], profiles.index(row['profile']))
         badge = '<span class="badge pass">PASS</span>' if row['passed'] else '<span class="badge fail">FAIL</span>'
+        lint_badge = f'<span class="badge pass">{row["lint_issues"]}</span>' if row['lint_issues'] == 0 else f'<span class="badge fail">{row["lint_issues"]}</span>'
+        extra_badge = f'<span class="badge pass">{row["files_extra"]}</span>' if row['files_extra'] == 0 else f'<span class="badge fail">{row["files_extra"]}</span>'
         table_html += f"""<tr>
             <td><span class="dot" style="background:{c['border']}"></span>{html.escape(row['profile'])}</td>
             <td>{html.escape(row['task'])}</td>
@@ -1850,7 +1906,10 @@ try:
             <td>${row['cost']:.4f}</td>
             <td>{row['duration']}s</td>
             <td>{row['output_tokens']:,}</td>
-            <td>{row['cache_efficiency']*100:.1f}%</td>
+            <td>{lint_badge}</td>
+            <td>{row['complexity']:.1f}</td>
+            <td>{extra_badge}</td>
+            <td>{row['lines_generated']}</td>
         </tr>"""
 
     trend_html = ""
@@ -1920,7 +1979,7 @@ try:
 <div class="section">
     <h2>Results Detail</h2>
     <table>
-        <thead><tr><th>Profile</th><th>Task</th><th>Status</th><th>Quality</th><th>Cost</th><th>Duration</th><th>Output Tokens</th><th>Cache Eff.</th></tr></thead>
+        <thead><tr><th>Profile</th><th>Task</th><th>Status</th><th>Quality</th><th>Cost</th><th>Duration</th><th>Tokens</th><th>Lint</th><th>Complexity</th><th>Extra Files</th><th>Lines</th></tr></thead>
         <tbody>{table_html}</tbody>
     </table>
 </div>
@@ -1931,7 +1990,7 @@ try:
 new Chart(document.getElementById('radar'), {{
     type: 'radar',
     data: {{
-        labels: ['Pass Rate', 'Quality Score', 'Cost Efficiency', 'Speed', 'Token Efficiency', 'Cache Efficiency'],
+        labels: {json.dumps(radar_labels)},
         datasets: [{','.join(radar_datasets_js)}]
     }},
     options: {{
@@ -1939,8 +1998,8 @@ new Chart(document.getElementById('radar'), {{
         maintainAspectRatio: true,
         scales: {{
             r: {{
-                min: 0, max: 100,
-                ticks: {{ stepSize: 20, color: '#64748b', backdropColor: 'transparent' }},
+                min: 20, max: 100,
+                ticks: {{ stepSize: 10, color: '#64748b', backdropColor: 'transparent' }},
                 grid: {{ color: '#334155' }},
                 angleLines: {{ color: '#334155' }},
                 pointLabels: {{ color: '#94a3b8', font: {{ size: 13 }} }}
