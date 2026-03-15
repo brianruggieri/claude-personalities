@@ -1299,10 +1299,22 @@ _benchmark_run_task() {
 	local claude_exit=0
 	local claude_output_file="$tmpdir/_claude_output.json"
 
-	(cd "$tmpdir" && claude -p \
-		--dangerously-skip-permissions \
-		--output-format json \
-		--max-budget-usd 5 \
+	# Inject the active profile's CLAUDE.md so the personality actually affects output.
+	# Without this, all profiles would read whatever branch the repo root is on.
+	local profile_claude_md=""
+	profile_claude_md="$(git -C "$REPO_DIR" show "$profile:claude/CLAUDE.md" 2>/dev/null || true)"
+
+	local -a claude_args=(
+		-p
+		--dangerously-skip-permissions
+		--output-format json
+		--max-budget-usd 5
+	)
+	if [ -n "$profile_claude_md" ]; then
+		claude_args+=(--append-system-prompt "$profile_claude_md")
+	fi
+
+	(cd "$tmpdir" && claude "${claude_args[@]}" \
 		"$prompt" > "$claude_output_file" 2>/dev/null) || claude_exit=$?
 
 	# Run verification
