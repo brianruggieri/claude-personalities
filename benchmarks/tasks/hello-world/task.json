@@ -6,5 +6,12 @@
   "difficulty": "trivial",
   "timeout": 30,
   "scoring": "binary",
-  "metrics": ["correctness", "cost", "duration", "token_efficiency"]
+  "metrics": ["correctness", "cost", "duration", "token_efficiency"],
+  "expected_complexity": {
+    "max_files": 1,
+    "max_classes": 0,
+    "max_functions": 0,
+    "max_lines": 5,
+    "disallow_patterns": ["class ", "def ", "import "]
+  }
 }
