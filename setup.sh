@@ -1327,7 +1327,8 @@ _benchmark_run_task() {
 			analyzer_output+="$(python3 "$analyzers_dir/regression_check.py" "$tmpdir" "$task_dir/fixture" 2>/dev/null || true)"$'\n'
 		fi
 		# LLM-as-judge (uses subscription via claude -p)
-		if command -v claude &>/dev/null; then
+		# Disabled during initial runs to avoid slowdown — enable with BENCHMARK_JUDGE=1
+		if [ "${BENCHMARK_JUDGE:-0}" = "1" ] && command -v claude &>/dev/null; then
 			analyzer_output+="$(python3 "$analyzers_dir/llm_judge.py" "$tmpdir" "$task_name" 2>/dev/null || true)"$'\n'
 		fi
 	fi
@@ -2256,6 +2257,16 @@ cmd_benchmark() {
 	if ! command -v claude &>/dev/null; then
 		echo "claude CLI not found. Install Claude Code first."
 		return 1
+	fi
+
+	# Warn if running inside a Claude Code session (nested claude -p may hang)
+	if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] || [ -n "${CLAUDE_SESSION_ID:-}" ]; then
+		echo ""
+		echo "  ⚠ Running inside a Claude Code session."
+		echo "  Benchmarks use 'claude -p' which may conflict with the active session."
+		echo "  For reliable results, run from a regular terminal:"
+		echo "    ./setup.sh benchmark"
+		echo ""
 	fi
 
 	echo ""
