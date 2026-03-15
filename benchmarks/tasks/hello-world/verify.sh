@@ -10,8 +10,10 @@ fi
 content="$(cat "$dir/output.txt")"
 if [ "$content" = "Hello from Claude Code" ]; then
 	echo "PASS"
+	echo "SCORE:100"
 	exit 0
 else
 	echo "FAIL: expected 'Hello from Claude Code', got '$content'"
+	echo "SCORE:0"
 	exit 1
 fi

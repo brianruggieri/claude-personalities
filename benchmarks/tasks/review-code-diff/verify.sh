@@ -30,10 +30,14 @@ if echo "$content" | grep -qE "admin_reset|update.*inject|f.*update|second.*inje
 	found=$((found + 1))
 fi
 
+score=$(( found * 100 / 4 ))
+
 if [ "$found" -ge 3 ]; then
 	echo "PASS ($found/4 issues detected)"
+	echo "SCORE:$score"
 	exit 0
 else
 	echo "FAIL: only detected $found/4 expected issues"
+	echo "SCORE:$score"
 	exit 1
 fi
