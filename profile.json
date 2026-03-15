@@ -1,0 +1,17 @@
+{
+	"name": "opinionated",
+	"description": "Bleeding-edge developer setup with strong defaults and guardrails",
+	"author": "brianruggieri",
+	"category": "full-stack",
+	"tags": ["opinionated", "bleeding-edge", "guardrails", "design", "testing"],
+	"capabilities": [
+		"frontend-design",
+		"tdd-workflow",
+		"code-review",
+		"browser-testing",
+		"api-docs-lookup",
+		"typescript-intelligence",
+		"design-polish",
+		"autonomous-loops"
+	]
+}

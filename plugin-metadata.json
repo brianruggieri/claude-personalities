@@ -1,0 +1,59 @@
+{
+	"superpowers": {
+		"marketplace": "claude-plugins-official",
+		"skills": 22,
+		"mcp_tools": 0,
+		"listing_tokens": 880,
+		"description": "Core skills: TDD, debugging, collaboration patterns"
+	},
+	"impeccable": {
+		"marketplace": "impeccable",
+		"skills": 18,
+		"mcp_tools": 0,
+		"listing_tokens": 720,
+		"description": "Design vocabulary: polish, distill, audit, bolder, quieter"
+	},
+	"playwright": {
+		"marketplace": "claude-plugins-official",
+		"skills": 0,
+		"mcp_tools": 25,
+		"listing_tokens": 500,
+		"description": "Browser automation and testing"
+	},
+	"context7": {
+		"marketplace": "claude-plugins-official",
+		"skills": 0,
+		"mcp_tools": 2,
+		"listing_tokens": 40,
+		"description": "Library documentation lookup"
+	},
+	"code-review": {
+		"marketplace": "claude-plugins-official",
+		"skills": 1,
+		"mcp_tools": 0,
+		"listing_tokens": 40,
+		"description": "PR code review"
+	},
+	"ralph-loop": {
+		"marketplace": "claude-plugins-official",
+		"skills": 3,
+		"mcp_tools": 0,
+		"listing_tokens": 120,
+		"description": "Autonomous iterative loops"
+	},
+	"frontend-design": {
+		"marketplace": "claude-plugins-official",
+		"skills": 1,
+		"mcp_tools": 0,
+		"listing_tokens": 40,
+		"description": "Frontend design skill"
+	},
+	"typescript-lsp": {
+		"marketplace": "claude-plugins-official",
+		"skills": 0,
+		"mcp_tools": 0,
+		"lsp_servers": 1,
+		"listing_tokens": 20,
+		"description": "TypeScript language server"
+	}
+}
