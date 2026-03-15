@@ -755,7 +755,7 @@ _profile_table() {
 	echo ""
 	printf "  %-14s %-12s %8s  %7s  %6s  %9s  %11s\n" \
 		"Profile" "Category" "Tokens†" "Plugins" "Skills" "MCP Tools" "User Skills"
-	printf '  ─%.0s' {1..76}; echo ""
+	printf '  '; printf '─%.0s' {1..76}; echo ""
 
 	for ((i=0; i<count; i++)); do
 		local tok_fmt="${tokens[$i]}"
@@ -786,7 +786,7 @@ PYEOF
 	if [ -n "$cap_names" ]; then
 		echo ""
 		echo "  Capability Matrix"
-		printf '  ─%.0s' {1..76}; echo ""
+		printf '  '; printf '─%.0s' {1..76}; echo ""
 
 		# Header row with branch names
 		printf "  %-24s" ""
@@ -870,7 +870,7 @@ _profile_detail() {
 		printf "  %-38s %5d tokens   %s %3d%%\n" "${labels[$i]}" "$val" "$bar" "$pct"
 	done
 
-	printf '  ─%.0s' {1..76}; echo ""
+	printf '  '; printf '─%.0s' {1..76}; echo ""
 	printf "  %-38s %5d tokens\n" "TOTAL (profile overhead)" "$P_TOTAL_TOKENS"
 	printf "  %-38s %5d tokens\n" "+ Base CC overhead" "$base_overhead"
 	printf "  %-38s %5d tokens\n" "= Estimated total prompt" "$total_with_base"
@@ -1006,16 +1006,17 @@ PYEOF
 	# Capability diff
 	echo ""
 	local only_a="" only_b=""
-	IFS=',' read -ra caps_a <<< "$a_caps"
-	IFS=',' read -ra caps_b <<< "$b_caps"
+	local -a caps_a=() caps_b=()
+	[ -n "$a_caps" ] && IFS=',' read -ra caps_a <<< "$a_caps"
+	[ -n "$b_caps" ] && IFS=',' read -ra caps_b <<< "$b_caps"
 
-	for cap in "${caps_a[@]}"; do
+	for cap in ${caps_a[@]+"${caps_a[@]}"}; do
 		[ -z "$cap" ] && continue
 		if ! echo ",$b_caps," | grep -q ",$cap,"; then
 			only_a="${only_a:+$only_a, }$cap"
 		fi
 	done
-	for cap in "${caps_b[@]}"; do
+	for cap in ${caps_b[@]+"${caps_b[@]}"}; do
 		[ -z "$cap" ] && continue
 		if ! echo ",$a_caps," | grep -q ",$cap,"; then
 			only_b="${only_b:+$only_b, }$cap"
