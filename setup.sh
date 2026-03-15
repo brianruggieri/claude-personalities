@@ -1506,6 +1506,11 @@ try:
             return 0
         return len([f for f in os.listdir(task_dir) if f.endswith('.json')])
 
+    # Symbols (assigned to vars for Python 3.10 f-string compat)
+    dash = '\u2014'
+    check = '\u2713'
+    cross = '\u2717'
+
     # Column widths
     task_w = max((len(t) for t in task_names), default=20)
     task_w = max(task_w, 20)
@@ -1531,11 +1536,11 @@ try:
             r = get_latest(p, task)
             runs = get_run_count(p, task)
             if r is None:
-                row += f'  {"\u2014":>{col_w}}'
+                row += f'  {dash:>{col_w}}'
             else:
                 passed = r.get('passed', False)
                 cost = r.get('cost_usd', 0)
-                mark = '\u2713' if passed else '\u2717'
+                mark = check if passed else cross
                 cell = f'{mark} ${cost:.2f}'
                 if runs > 1:
                     cell += f' ({runs})'
@@ -1554,12 +1559,14 @@ try:
         t = totals[p]
         if t['total'] > 0:
             pct = t['passed'] * 100 // t['total']
-            score_row += f'  {f"{t["passed"]}/{t["total"]} ({pct}%)":>{col_w}}'
+            score_cell = f'{t["passed"]}/{t["total"]} ({pct}%)'
+            score_row += f'  {score_cell:>{col_w}}'
             avg = t['cost'] / t['total']
-            cost_row += f'  {f"${avg:.2f}":>{col_w}}'
+            cost_cell = f'${avg:.2f}'
+            cost_row += f'  {cost_cell:>{col_w}}'
         else:
-            score_row += f'  {"\u2014":>{col_w}}'
-            cost_row += f'  {"\u2014":>{col_w}}'
+            score_row += f'  {dash:>{col_w}}'
+            cost_row += f'  {dash:>{col_w}}'
     print(score_row)
     print(cost_row)
     print()
