@@ -1,0 +1,10 @@
+{
+  "name": "hello-world",
+  "description": "Baseline cost measurement — respond with a specific string",
+  "category": "baseline",
+  "capability": null,
+  "difficulty": "trivial",
+  "timeout": 30,
+  "scoring": "binary",
+  "metrics": ["correctness", "cost", "duration", "token_efficiency"]
+}

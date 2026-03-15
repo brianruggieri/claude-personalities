@@ -1,0 +1,10 @@
+{
+  "name": "review-code-diff",
+  "description": "Review a code diff and identify security and quality issues",
+  "category": "review",
+  "capability": "code-review",
+  "difficulty": "basic",
+  "timeout": 120,
+  "scoring": "binary",
+  "metrics": ["correctness", "cost", "duration", "token_efficiency"]
+}

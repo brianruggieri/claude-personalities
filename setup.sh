@@ -80,6 +80,11 @@ Metrics:
     "hooks": { "SessionEnd": [{ "type": "command",
       "command": "~/git/claude_personalities/setup.sh snapshot --quiet" }] }
 
+Benchmarking:
+  benchmark                        Run all benchmark tasks against current profile
+  benchmark --task <name>          Run a specific benchmark task
+  benchmark --report               Show benchmark results across profiles
+
 Setup:
   backup          Back up current ~/.claude/ personality files
   import          Import personality files from ~/.claude/ into this repo
@@ -843,6 +848,16 @@ PYEOF
 		done <<< "$session_data"
 	fi
 
+	# Benchmark results (if data exists)
+	local benchmarks_dir="$REPO_DIR/_metrics/benchmarks"
+	if [ -d "$benchmarks_dir" ]; then
+		local has_data
+		has_data="$(find "$benchmarks_dir" -name '*.json' -print -quit 2>/dev/null)"
+		if [ -n "$has_data" ]; then
+			_benchmark_report
+		fi
+	fi
+
 	echo ""
 }
 
@@ -1248,6 +1263,416 @@ except Exception:
 PYEOF
 }
 
+# ─── Benchmarks ───────────────────────────────────────────────────────────────
+
+# Run a single benchmark task. Called by cmd_benchmark.
+# Usage: _benchmark_run_task <task_dir> <profile>
+_benchmark_run_task() {
+	local task_dir="$1"
+	local profile="$2"
+	local task_name
+	task_name="$(basename "$task_dir")"
+
+	echo "  Running: $task_name"
+
+	# Create temp working directory
+	local tmpdir
+	tmpdir="$(mktemp -d)"
+
+	# Clean up on exit
+	trap "rm -r '$tmpdir' 2>/dev/null || true" RETURN
+
+	# Copy fixture files if present
+	if [ -d "$task_dir/fixture" ]; then
+		cp -a "$task_dir/fixture/." "$tmpdir/"
+	fi
+
+	# Copy expected files if present (for verify.sh to reference)
+	if [ -d "$task_dir/expected" ]; then
+		cp -a "$task_dir/expected" "$tmpdir/_expected"
+	fi
+
+	# Run claude in print mode with JSON output for metrics capture
+	local prompt
+	prompt="$(cat "$task_dir/prompt.md")"
+	local claude_exit=0
+	local claude_output_file="$tmpdir/_claude_output.json"
+
+	(cd "$tmpdir" && claude -p \
+		--dangerously-skip-permissions \
+		--output-format json \
+		--max-budget-usd 5 \
+		"$prompt" > "$claude_output_file" 2>/dev/null) || claude_exit=$?
+
+	# Run verification
+	local passed=false
+	local verify_output=""
+	if [ -f "$task_dir/verify.sh" ]; then
+		verify_output="$("$task_dir/verify.sh" "$tmpdir" 2>&1)" && passed=true || passed=false
+	fi
+
+	# Extract metrics from claude JSON output and write result
+	local results_dir="$REPO_DIR/_metrics/benchmarks/$profile/$task_name"
+	mkdir -p "$results_dir"
+	local timestamp
+	timestamp="$(date -u +%Y%m%d-%H%M%S)"
+
+	python3 - "$claude_output_file" "$profile" "$task_name" \
+		"$results_dir/${timestamp}.json" "$passed" <<'PYEOF'
+import json, sys
+from datetime import datetime, timezone
+
+try:
+    claude_output_path = sys.argv[1]
+    profile = sys.argv[2]
+    task_name = sys.argv[3]
+    out_path = sys.argv[4]
+    passed = sys.argv[5] == 'true'
+
+    cost = 0
+    duration = 0
+    input_tokens = 0
+    output_tokens = 0
+    cache_read = 0
+    cache_creation = 0
+    model = "unknown"
+
+    try:
+        with open(claude_output_path, 'r') as f:
+            data = json.load(f)
+        cost = data.get('total_cost_usd', 0)
+        duration = round(data.get('duration_ms', 0) / 1000)
+        usage = data.get('usage', {})
+        input_tokens = usage.get('input_tokens', 0)
+        output_tokens = usage.get('output_tokens', 0)
+        cache_read = usage.get('cache_read_input_tokens', 0)
+        cache_creation = usage.get('cache_creation_input_tokens', 0)
+        model_usage = data.get('modelUsage', {})
+        if model_usage:
+            model = list(model_usage.keys())[0]
+    except Exception:
+        pass
+
+    result = {
+        'profile': profile,
+        'task': task_name,
+        'timestamp': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'passed': passed,
+        'score': 1 if passed else 0,
+        'cost_usd': cost,
+        'duration_seconds': duration,
+        'total_input_tokens': input_tokens,
+        'total_output_tokens': output_tokens,
+        'cache_read_tokens': cache_read,
+        'cache_creation_tokens': cache_creation,
+        'model': model,
+    }
+
+    with open(out_path, 'w') as f:
+        json.dump(result, f, indent=2)
+        f.write('\n')
+
+except Exception as e:
+    # Write a fallback result so the runner always has something to report
+    try:
+        fallback = {
+            'profile': sys.argv[2], 'task': sys.argv[3],
+            'timestamp': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'passed': sys.argv[5] == 'true',
+            'score': 1 if sys.argv[5] == 'true' else 0,
+            'cost_usd': 0, 'duration_seconds': 0,
+            'total_input_tokens': 0, 'total_output_tokens': 0,
+            'cache_read_tokens': 0, 'cache_creation_tokens': 0,
+            'model': 'unknown', 'error': str(e),
+        }
+        with open(sys.argv[4], 'w') as f:
+            json.dump(fallback, f, indent=2)
+            f.write('\n')
+    except Exception:
+        pass
+PYEOF
+
+	# Print result
+	if [ "$passed" = "true" ]; then
+		echo "    PASS  $verify_output"
+	else
+		echo "    FAIL  $verify_output"
+		if [ "$claude_exit" -ne 0 ]; then
+			echo "    (claude exited with code $claude_exit)"
+		fi
+	fi
+}
+
+# Check for regressions in benchmark results for a profile.
+_benchmark_check_regressions() {
+	local profile="$1"
+	local benchmarks_dir="$REPO_DIR/_metrics/benchmarks/$profile"
+	[ -d "$benchmarks_dir" ] || return 0
+
+	python3 - "$benchmarks_dir" <<'PYEOF'
+import json, os, sys
+
+try:
+    benchmarks_dir = sys.argv[1]
+
+    for task_name in sorted(os.listdir(benchmarks_dir)):
+        task_dir = os.path.join(benchmarks_dir, task_name)
+        if not os.path.isdir(task_dir):
+            continue
+
+        results = []
+        for fname in sorted(os.listdir(task_dir)):
+            if not fname.endswith('.json'):
+                continue
+            try:
+                with open(os.path.join(task_dir, fname)) as f:
+                    results.append(json.load(f))
+            except (json.JSONDecodeError, OSError):
+                continue
+
+        if len(results) < 2:
+            continue
+
+        latest = results[-1]
+        previous = results[:-1]
+
+        # Check pass -> fail regression
+        prev_passed = any(r.get('passed', False) for r in previous)
+        if prev_passed and not latest.get('passed', False):
+            print(f'  \u26a0 Regression: "{task_name}" \u2014 was passing, now failing')
+
+        # Check cost increase >10%
+        prev_costs = [r.get('cost_usd', 0) for r in previous if r.get('cost_usd', 0) > 0]
+        if prev_costs and latest.get('cost_usd', 0) > 0:
+            avg_cost = sum(prev_costs) / len(prev_costs)
+            curr_cost = latest['cost_usd']
+            if avg_cost > 0 and (curr_cost - avg_cost) / avg_cost > 0.10:
+                pct = ((curr_cost - avg_cost) / avg_cost) * 100
+                print(f'  \u26a0 Cost increase: "{task_name}" \u2014 avg ${avg_cost:.2f} \u2192 ${curr_cost:.2f} (+{pct:.0f}%)')
+
+except Exception:
+    pass
+PYEOF
+}
+
+# Show benchmark results across all profiles (read-only, no execution).
+_benchmark_report() {
+	local benchmarks_dir="$REPO_DIR/_metrics/benchmarks"
+	if [ ! -d "$benchmarks_dir" ]; then
+		echo "No benchmark data in _metrics/benchmarks/"
+		echo "Run './setup.sh benchmark' to generate results."
+		return 0
+	fi
+
+	python3 - "$benchmarks_dir" "$REPO_DIR/benchmarks/tasks" <<'PYEOF'
+import json, os, sys
+
+try:
+    benchmarks_dir = sys.argv[1]
+    tasks_dir = sys.argv[2]
+
+    # Discover all task names
+    task_names = sorted([
+        d for d in os.listdir(tasks_dir)
+        if os.path.isfile(os.path.join(tasks_dir, d, 'task.json'))
+    ]) if os.path.isdir(tasks_dir) else []
+
+    # Discover all profiles with results
+    profiles = sorted([
+        d for d in os.listdir(benchmarks_dir)
+        if os.path.isdir(os.path.join(benchmarks_dir, d))
+    ])
+
+    if not profiles:
+        print('No benchmark results found.')
+        sys.exit(0)
+
+    def get_latest(profile, task):
+        task_dir = os.path.join(benchmarks_dir, profile, task)
+        if not os.path.isdir(task_dir):
+            return None
+        files = sorted([f for f in os.listdir(task_dir) if f.endswith('.json')])
+        if not files:
+            return None
+        try:
+            with open(os.path.join(task_dir, files[-1])) as f:
+                return json.load(f)
+        except Exception:
+            return None
+
+    def get_run_count(profile, task):
+        task_dir = os.path.join(benchmarks_dir, profile, task)
+        if not os.path.isdir(task_dir):
+            return 0
+        return len([f for f in os.listdir(task_dir) if f.endswith('.json')])
+
+    # Symbols (assigned to vars for Python 3.10 f-string compat)
+    dash = '\u2014'
+    check = '\u2713'
+    cross = '\u2717'
+
+    # Column widths
+    task_w = max((len(t) for t in task_names), default=20)
+    task_w = max(task_w, 20)
+    col_w = max((len(p) for p in profiles), default=12)
+    col_w = max(col_w, 12)
+
+    print()
+    print('  Benchmark Results (last run per task)')
+    print('  ' + '\u2500' * 76)
+
+    # Header row
+    header = f'  {"Task":<{task_w}}'
+    for p in profiles:
+        header += f'  {p:>{col_w}}'
+    print(header)
+
+    # Data rows
+    totals = {p: {'passed': 0, 'total': 0, 'cost': 0.0} for p in profiles}
+
+    for task in task_names:
+        row = f'  {task:<{task_w}}'
+        for p in profiles:
+            r = get_latest(p, task)
+            runs = get_run_count(p, task)
+            if r is None:
+                row += f'  {dash:>{col_w}}'
+            else:
+                passed = r.get('passed', False)
+                cost = r.get('cost_usd', 0)
+                mark = check if passed else cross
+                cell = f'{mark} ${cost:.2f}'
+                if runs > 1:
+                    cell += f' ({runs})'
+                row += f'  {cell:>{col_w}}'
+                totals[p]['total'] += 1
+                if passed:
+                    totals[p]['passed'] += 1
+                totals[p]['cost'] += cost
+        print(row)
+
+    # Summary
+    print()
+    score_row = f'  {"Score":<{task_w}}'
+    cost_row = f'  {"Avg cost":<{task_w}}'
+    for p in profiles:
+        t = totals[p]
+        if t['total'] > 0:
+            pct = t['passed'] * 100 // t['total']
+            score_cell = f'{t["passed"]}/{t["total"]} ({pct}%)'
+            score_row += f'  {score_cell:>{col_w}}'
+            avg = t['cost'] / t['total']
+            cost_cell = f'${avg:.2f}'
+            cost_row += f'  {cost_cell:>{col_w}}'
+        else:
+            score_row += f'  {dash:>{col_w}}'
+            cost_row += f'  {dash:>{col_w}}'
+    print(score_row)
+    print(cost_row)
+    print()
+
+except Exception as e:
+    print(f'Report failed: {e}')
+PYEOF
+}
+
+# Main benchmark command.
+# Usage: cmd_benchmark [--task <name>] [--report]
+cmd_benchmark() {
+	local mode="run"
+	local single_task=""
+
+	while [ $# -gt 0 ]; do
+		case "$1" in
+			--task)
+				single_task="${2:-}"
+				if [ -z "$single_task" ]; then
+					echo "usage: ./setup.sh benchmark --task <name>"
+					return 1
+				fi
+				shift 2
+				;;
+			--report)
+				mode="report"
+				shift
+				;;
+			*)
+				shift
+				;;
+		esac
+	done
+
+	if [ "$mode" = "report" ]; then
+		_benchmark_report
+		return
+	fi
+
+	local profile
+	profile="$(git -C "$REPO_DIR" branch --show-current 2>/dev/null || echo "unknown")"
+	local tasks_dir="$REPO_DIR/benchmarks/tasks"
+
+	if [ ! -d "$tasks_dir" ]; then
+		echo "No benchmark tasks found in benchmarks/tasks/"
+		return 1
+	fi
+
+	# Check claude CLI is available
+	if ! command -v claude &>/dev/null; then
+		echo "claude CLI not found. Install Claude Code first."
+		return 1
+	fi
+
+	echo ""
+	echo "Benchmark Runner — Profile: $profile"
+	printf '═%.0s' {1..60}; echo ""
+
+	local task_count=0
+	local pass_count=0
+
+	for task_dir in "$tasks_dir"/*/; do
+		[ -f "$task_dir/task.json" ] || continue
+		local name
+		name="$(basename "$task_dir")"
+
+		# Filter to single task if specified
+		if [ -n "$single_task" ] && [ "$name" != "$single_task" ]; then
+			continue
+		fi
+
+		_benchmark_run_task "$task_dir" "$profile"
+		task_count=$((task_count + 1))
+
+		# Check if passed from the result file
+		local latest
+		latest="$(ls -t "$REPO_DIR/_metrics/benchmarks/$profile/$name/"*.json 2>/dev/null | head -1)"
+		if [ -n "$latest" ]; then
+			local did_pass
+			did_pass="$(python3 -c "
+import json, sys
+try:
+    with open(sys.argv[1]) as f:
+        print(json.load(f).get('passed', False))
+except Exception:
+    print('False')
+" "$latest")"
+			[ "$did_pass" = "True" ] && pass_count=$((pass_count + 1))
+		fi
+	done
+
+	if [ -n "$single_task" ] && [ "$task_count" -eq 0 ]; then
+		echo "Task '$single_task' not found in benchmarks/tasks/"
+		return 1
+	fi
+
+	echo ""
+	printf '─%.0s' {1..60}; echo ""
+	echo "  Results: $pass_count/$task_count passed"
+	echo ""
+
+	# Regression detection
+	_benchmark_check_regressions "$profile"
+}
+
 # Main dispatch for profile command
 cmd_profile() {
 	local mode="table"
@@ -1307,6 +1732,7 @@ case "${1:-}" in
 	changelog)    cmd_changelog ;;
 	pin-version)  cmd_pin_version ;;
 	snapshot)     shift; cmd_snapshot "$@" ;;
+	benchmark)    shift; cmd_benchmark "$@" ;;
 	profile)      shift; cmd_profile "$@" ;;
 	*)            usage ;;
 esac

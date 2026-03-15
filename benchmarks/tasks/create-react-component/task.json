@@ -1,0 +1,10 @@
+{
+  "name": "create-react-component",
+  "description": "Create a React component from a design specification",
+  "category": "frontend",
+  "capability": "frontend-design",
+  "difficulty": "basic",
+  "timeout": 180,
+  "scoring": "binary",
+  "metrics": ["correctness", "cost", "duration", "token_efficiency"]
+}
