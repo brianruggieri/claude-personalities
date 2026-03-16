@@ -13,7 +13,6 @@ Usage:
   python3 import-tasks.py --source humaneval --filter 2,5,10 --dry-run
 """
 import argparse
-import gzip
 import json
 import os
 import re
