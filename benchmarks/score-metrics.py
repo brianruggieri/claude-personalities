@@ -40,6 +40,8 @@ def count_extra_files(workdir, expected_files):
     for root, dirs, files in os.walk(workdir):
         dirs[:] = [d for d in dirs if not d.startswith(('.', '_'))]
         for f in files:
+            if f.startswith(('.', '_')):
+                continue
             rel = os.path.relpath(os.path.join(root, f), workdir)
             all_files.append(rel)
 
