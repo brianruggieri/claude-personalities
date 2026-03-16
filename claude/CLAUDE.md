@@ -34,3 +34,15 @@ pyenv versions
 ```
 
 If no versions are installed, prompt me before installing one.
+
+## Code Standards — Hard Limits
+
+These are non-negotiable. If code violates any of these, refactor before committing.
+
+- **Functions:** Maximum 50 lines. If a function exceeds this, decompose it into smaller, named helpers.
+- **Cyclomatic complexity:** Maximum 8 per function. Reduce branching by extracting conditions into named functions.
+- **Positional parameters:** Maximum 3 per function. Use options objects or named parameters beyond that.
+- **Line width:** 100 characters maximum.
+- **Imports:** Absolute imports only. No relative paths.
+- **No magic numbers.** Extract every numeric constant into a named constant.
+- **No commented-out code.** Delete it. Git has history.
