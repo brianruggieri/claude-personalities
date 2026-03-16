@@ -1023,8 +1023,447 @@ def _build_classeval_verify():
 
 
 def import_refactoring(args):
-    """Import tasks from Aider refactoring benchmarks."""
-    raise NotImplementedError("Refactoring importer not yet implemented")
+    """Import tasks from Aider refactoring benchmarks.
+
+    Each task asks the model to extract a method from a class into a
+    top-level function — the canonical "extract method" refactoring.
+    The verification checks AST node counts to ensure code was moved,
+    not elided or rewritten with comments.
+
+    Repo structure (per task dir):
+        .docs/instructions.md — refactoring instruction
+        <module>.py           — source file to refactor
+        <module>_test.py      — test calling verify_refactor(fname, method,
+                                method_children, class_name, class_children)
+    """
+    source_dir = os.path.join(
+        SOURCES_DIR, "refactor-benchmark", "refactor-benchmark"
+    )
+    if not os.path.isdir(source_dir):
+        print(f"ERROR: {source_dir} not found.")
+        print("Clone it first:")
+        print(
+            f"  git clone --depth 1 "
+            f"https://github.com/Aider-AI/refactor-benchmark.git "
+            f"{os.path.join(SOURCES_DIR, 'refactor-benchmark')}"
+        )
+        sys.exit(1)
+
+    # Scan all task directories and parse their test files
+    tasks = []
+    for task_name in sorted(os.listdir(source_dir)):
+        task_path = os.path.join(source_dir, task_name)
+        if not os.path.isdir(task_path):
+            continue
+
+        # Find the test file
+        test_file = None
+        source_file = None
+        for fname in os.listdir(task_path):
+            if fname.endswith("_test.py"):
+                test_file = os.path.join(task_path, fname)
+            elif fname.endswith(".py") and not fname.endswith("_test.py"):
+                source_file = os.path.join(task_path, fname)
+
+        if not test_file or not source_file:
+            continue
+
+        # Parse test file to extract verify_refactor parameters
+        params = _rf_parse_test(test_file)
+        if not params:
+            continue
+
+        # Read the instructions
+        instructions_path = os.path.join(task_path, ".docs", "instructions.md")
+        instructions = ""
+        if os.path.exists(instructions_path):
+            with open(instructions_path) as f:
+                instructions = f.read().strip()
+
+        # Read source file and count lines
+        with open(source_file) as f:
+            source_code = f.read()
+        src_lines = len([l for l in source_code.strip().split('\n') if l.strip()])
+
+        source_basename = os.path.basename(source_file)
+
+        tasks.append({
+            "task_name": task_name,
+            "task_path": task_path,
+            "source_file": source_file,
+            "source_basename": source_basename,
+            "test_file": test_file,
+            "source_code": source_code,
+            "src_lines": src_lines,
+            "instructions": instructions,
+            **params,
+        })
+
+    print(f"Found {len(tasks)} refactoring tasks")
+
+    # Sort by source file size (ascending) for predictable selection
+    tasks.sort(key=lambda t: t["src_lines"])
+
+    # Filter by name if specified
+    if args.filter:
+        filter_names = set(x.strip() for x in args.filter.split(','))
+        tasks = [t for t in tasks if t["task_name"] in filter_names]
+        print(f"Filtered to {len(tasks)} tasks by name")
+
+    # Default selection: pick tasks across a range of sizes
+    if not args.filter:
+        tasks = _rf_select_tasks(tasks)
+        print(f"Auto-selected {len(tasks)} tasks across complexity range")
+
+    # Apply max limit
+    if args.max and args.max < len(tasks):
+        tasks = tasks[:args.max]
+        print(f"Limited to first {args.max} tasks")
+
+    # Import each task
+    created = 0
+    for idx, entry in enumerate(tasks):
+        slug = slugify(
+            f"{entry['class_name']}-{entry['method']}"
+        )
+        name = f"rf-{idx + 1:03d}-{slug}"
+
+        # Skip if task directory already exists
+        task_dir = os.path.join(TASKS_DIR, name)
+        if os.path.isdir(task_dir) and not args.dry_run:
+            print(f"  Skipping {name} (already exists)")
+            continue
+
+        difficulty = _rf_difficulty(entry["src_lines"])
+
+        # task.json
+        task_json = {
+            "name": name,
+            "description": (
+                f"Extract {entry['class_name']}.{entry['method']} "
+                f"to a top-level function"
+            ),
+            "category": "refactoring",
+            "capability": "code-quality",
+            "difficulty": difficulty,
+            "timeout": 180,
+            "scoring": "binary",
+            "metrics": [
+                "correctness", "cost", "duration", "token_efficiency"
+            ],
+            "expected_complexity": {
+                "max_files": 1,
+                "max_classes": 0,
+                "max_functions": 0,
+                "max_lines": entry["src_lines"] + 20,
+                "disallow_patterns": []
+            },
+            "source": {
+                "dataset": "Aider-Refactoring",
+                "task_dir": entry["task_name"],
+                "class_name": entry["class_name"],
+                "method": entry["method"],
+                "license": "Apache-2.0"
+            }
+        }
+
+        # prompt.md
+        prompt_md = _rf_build_prompt(entry)
+
+        # verify.sh
+        verify_sh = _rf_build_verify(entry["source_basename"])
+
+        # verify_refactor.py — AST-based checker for the fixture
+        verify_script = _rf_build_verify_script(
+            entry["source_basename"],
+            entry["method"],
+            entry["method_children"],
+            entry["class_name"],
+            entry["class_children"],
+        )
+
+        # fixture files
+        fixture_files = {
+            entry["source_basename"]: entry["source_code"],
+            "verify_refactor.py": verify_script,
+        }
+
+        print(
+            f"  {'[dry-run] ' if args.dry_run else ''}Creating {name} "
+            f"(difficulty={difficulty}, lines={entry['src_lines']}, "
+            f"class={entry['class_name']}, method={entry['method']})"
+        )
+        create_task_dir(
+            name, task_json, prompt_md, verify_sh, fixture_files,
+            dry_run=args.dry_run,
+        )
+        created += 1
+
+    print(
+        f"\n{'Would create' if args.dry_run else 'Created'} "
+        f"{created} refactoring tasks"
+    )
+
+
+def _rf_parse_test(test_file):
+    """Parse a refactoring benchmark test file to extract verify_refactor params.
+
+    Returns dict with method, method_children, class_name, class_children
+    or None if parsing fails.
+    """
+    with open(test_file) as f:
+        content = f.read()
+
+    # Extract: method = "..."
+    m_method = re.search(r'method\s*=\s*"([^"]+)"', content)
+    # Extract: method_children = <int>
+    m_mchildren = re.search(r'method_children\s*=\s*(\d+)', content)
+    # Extract: class_name = "..."
+    m_class = re.search(r'class_name\s*=\s*"([^"]+)"', content)
+    # Extract: class_children = <int>
+    m_cchildren = re.search(r'class_children\s*=\s*(\d+)', content)
+
+    if not all([m_method, m_mchildren, m_class, m_cchildren]):
+        return None
+
+    return {
+        "method": m_method.group(1),
+        "method_children": int(m_mchildren.group(1)),
+        "class_name": m_class.group(1),
+        "class_children": int(m_cchildren.group(1)),
+    }
+
+
+def _rf_select_tasks(tasks):
+    """Select 5 tasks spanning the complexity range.
+
+    Picks from small, small-medium, medium, medium-large, and large buckets
+    to give good coverage of refactoring difficulty.
+    """
+    if len(tasks) <= 5:
+        return tasks
+
+    n = len(tasks)
+    # Pick at evenly spaced indices
+    indices = [
+        0,              # smallest
+        n // 4,         # 25th percentile
+        n // 2,         # median
+        3 * n // 4,     # 75th percentile
+        n - 1,          # largest (but we'll cap it)
+    ]
+
+    # Cap the largest to avoid huge files (> 2000 lines)
+    # Find the last task under 2000 lines
+    max_idx = n - 1
+    for i in range(n - 1, -1, -1):
+        if tasks[i]["src_lines"] <= 2000:
+            max_idx = i
+            break
+    indices[-1] = min(indices[-1], max_idx)
+
+    # Deduplicate while preserving order
+    seen = set()
+    selected = []
+    for idx in indices:
+        if idx not in seen:
+            seen.add(idx)
+            selected.append(tasks[idx])
+
+    return selected
+
+
+def _rf_difficulty(src_lines):
+    """Map source file line count to difficulty for refactoring tasks."""
+    if src_lines <= 150:
+        return "basic"
+    elif src_lines <= 350:
+        return "intermediate"
+    elif src_lines <= 700:
+        return "advanced"
+    else:
+        return "expert"
+
+
+def _rf_build_prompt(entry):
+    """Build prompt.md for a refactoring task."""
+    source_basename = entry["source_basename"]
+    method = entry["method"]
+    class_name = entry["class_name"]
+
+    lines = []
+    # Use the original instructions if available, otherwise generate
+    if entry["instructions"]:
+        lines.append(entry["instructions"])
+    else:
+        lines.append(f"# Refactor {class_name}.{method}")
+        lines.append("")
+        lines.append(
+            f"Refactor the `{method}` method in the `{class_name}` class "
+            f"to be a stand alone, top level function."
+        )
+        lines.append(
+            f"Name the new function `{method}`, exactly the same name "
+            f"as the existing method."
+        )
+        lines.append(
+            f"Update any existing `self.{method}` calls to work with "
+            f"the new `{method}` function."
+        )
+
+    lines.append("")
+    lines.append(f"Edit `{source_basename}` in place.")
+    lines.append("")
+    lines.append("## Requirements")
+    lines.append("")
+    lines.append(
+        f"- The `{method}` method must be removed from `{class_name}` "
+        f"and exist as a top-level function"
+    )
+    lines.append(
+        f"- All calls to `self.{method}(...)` must be updated to call "
+        f"the top-level `{method}(...)` instead"
+    )
+    lines.append(
+        "- The file must remain valid Python (no syntax errors)"
+    )
+    lines.append(
+        "- Do not add, remove, or simplify any logic — "
+        "this is a pure structural refactor"
+    )
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+def _rf_build_verify(source_basename):
+    """Build verify.sh for a refactoring task.
+
+    Calls verify_refactor.py (generated per-task in the fixture) which
+    performs AST-based verification of the refactoring.
+    """
+    return (
+        '#!/usr/bin/env bash\n'
+        'set -euo pipefail\n'
+        'dir="$1"\n'
+        'scorer="$(dirname "$0")/../../score-metrics.py"\n'
+        '\n'
+        'cd "$dir"\n'
+        '\n'
+        '# Run AST-based refactoring verification\n'
+        'output="$(python3 verify_refactor.py 2>&1)" || true\n'
+        'echo "$output"\n'
+        '\n'
+        '# Run shared metrics\n'
+        f'python3 "$scorer" "$dir" \'["{source_basename}"]\''
+        ' "python" 2>/dev/null || true\n'
+        '\n'
+        'if echo "$output" | grep -q "ALL_TESTS_PASSED"; then\n'
+        '\techo "PASS"\n'
+        '\techo "SCORE:100"\n'
+        '\texit 0\n'
+        'else\n'
+        '\techo "FAIL"\n'
+        '\techo "SCORE:0"\n'
+        '\texit 1\n'
+        'fi\n'
+    )
+
+
+def _rf_build_verify_script(source_basename, method, method_children,
+                            class_name, class_children):
+    """Build verify_refactor.py — AST-based refactoring checker.
+
+    Checks:
+    1. File parses as valid Python
+    2. Method exists as a top-level function
+    3. Top-level function has ~method_children AST nodes (within 20%)
+    4. Class still exists but is smaller (lost ~method_children nodes)
+    5. Method no longer exists as a method inside the class
+    """
+    return textwrap.dedent(f'''\
+        """AST-based refactoring verification.
+
+        Checks that {class_name}.{method} was correctly extracted
+        to a top-level function.
+        """
+        import ast
+        import sys
+
+        FNAME = "{source_basename}"
+        METHOD = "{method}"
+        METHOD_CHILDREN = {method_children}
+        CLASS_NAME = "{class_name}"
+        CLASS_CHILDREN = {class_children}
+        TOLERANCE = 0.20
+
+
+        def main():
+            with open(FNAME) as f:
+                source = f.read()
+
+            # 1. Must parse as valid Python
+            try:
+                tree = ast.parse(source)
+            except SyntaxError as e:
+                print(f"VERIFY_FAIL: syntax error: {{e}}")
+                sys.exit(1)
+
+            # 2. Method must exist as top-level function
+            top_funcs = [
+                n for n in ast.iter_child_nodes(tree)
+                if isinstance(n, ast.FunctionDef) and n.name == METHOD
+            ]
+            if not top_funcs:
+                print(f"VERIFY_FAIL: {{METHOD}} not found as top-level function")
+                sys.exit(1)
+
+            # 3. Top-level function has approximately the right AST node count
+            func_nodes = sum(1 for _ in ast.walk(top_funcs[0]))
+            low = METHOD_CHILDREN * (1 - TOLERANCE)
+            high = METHOD_CHILDREN * (1 + TOLERANCE)
+            if not (low <= func_nodes <= high):
+                print(
+                    f"VERIFY_FAIL: top-level {{METHOD}} has {{func_nodes}} AST nodes, "
+                    f"expected ~{{METHOD_CHILDREN}} (range {{low:.0f}}-{{high:.0f}})"
+                )
+                sys.exit(1)
+
+            # 4. Class still exists and is smaller
+            classes = [
+                n for n in ast.iter_child_nodes(tree)
+                if isinstance(n, ast.ClassDef) and n.name == CLASS_NAME
+            ]
+            if not classes:
+                print(f"VERIFY_FAIL: class {{CLASS_NAME}} not found")
+                sys.exit(1)
+
+            cls_nodes = sum(1 for _ in ast.walk(classes[0]))
+            expected_cls = CLASS_CHILDREN - METHOD_CHILDREN
+            cls_low = expected_cls * (1 - TOLERANCE)
+            cls_high = expected_cls * (1 + TOLERANCE)
+            if not (cls_low <= cls_nodes <= cls_high):
+                print(
+                    f"VERIFY_FAIL: class {{CLASS_NAME}} has {{cls_nodes}} AST nodes, "
+                    f"expected ~{{expected_cls}} (range {{cls_low:.0f}}-{{cls_high:.0f}})"
+                )
+                sys.exit(1)
+
+            # 5. Method should NOT still be in the class
+            for node in ast.walk(classes[0]):
+                if isinstance(node, ast.FunctionDef) and node.name == METHOD:
+                    print(
+                        f"VERIFY_FAIL: {{METHOD}} still exists as method in {{CLASS_NAME}}"
+                    )
+                    sys.exit(1)
+
+            print("ALL_TESTS_PASSED")
+
+
+        if __name__ == "__main__":
+            main()
+    ''')
+
 
 
 # ---------------------------------------------------------------------------

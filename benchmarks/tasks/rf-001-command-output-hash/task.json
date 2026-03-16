@@ -1,0 +1,29 @@
+{
+  "name": "rf-001-command-output-hash",
+  "description": "Extract Command.output_hash to a top-level function",
+  "category": "refactoring",
+  "capability": "code-quality",
+  "difficulty": "basic",
+  "timeout": 180,
+  "scoring": "binary",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 1,
+    "max_classes": 0,
+    "max_functions": 0,
+    "max_lines": 100,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "Aider-Refactoring",
+    "task_dir": "diffsettings_Command_output_hash",
+    "class_name": "Command",
+    "method": "output_hash",
+    "license": "Apache-2.0"
+  }
+}

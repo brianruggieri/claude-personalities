@@ -1,0 +1,29 @@
+{
+  "name": "rf-003-metrics-container-get-metric-object",
+  "description": "Extract MetricsContainer._get_metric_object to a top-level function",
+  "category": "refactoring",
+  "capability": "code-quality",
+  "difficulty": "advanced",
+  "timeout": 180,
+  "scoring": "binary",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 1,
+    "max_classes": 0,
+    "max_functions": 0,
+    "max_lines": 608,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "Aider-Refactoring",
+    "task_dir": "compile_utils_MetricsContainer__get_metric_object",
+    "class_name": "MetricsContainer",
+    "method": "_get_metric_object",
+    "license": "Apache-2.0"
+  }
+}
