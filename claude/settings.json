@@ -34,7 +34,21 @@
     "deny": [],
     "defaultMode": "acceptEdits"
   },
-  "hooks": {},
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Teammate",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'TEAM=$(cat | jq -r \".tool_input.team_name // empty\"); if [ -n \"$TEAM\" ] && ! pgrep -f \"teamchat.*$TEAM\" > /dev/null; then echo \"\" && echo \"  ┌──────────────────────────────────────────────┐\" && echo \"  │  📡 teamchat recording: $TEAM\" && echo \"  │  🌐 http://localhost:3456\" && echo \"  │  💾 ~/.teamchat/sessions/$TEAM.jsonl\" && echo \"  └──────────────────────────────────────────────┘\" && echo \"\" && teamchat --team \"$TEAM\" & fi'",
+            "async": true,
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
   "statusLine": {
     "type": "command",
     "command": "bash $HOME/.claude/statusline-command.sh"
@@ -64,7 +78,10 @@
     "pr": ""
   },
   "worktree": {
-    "symlinkDirectories": ["node_modules", ".cache"]
+    "symlinkDirectories": [
+      "node_modules",
+      ".cache"
+    ]
   },
   "showThinkingSummaries": true
 }
