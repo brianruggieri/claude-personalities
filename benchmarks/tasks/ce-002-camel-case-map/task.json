@@ -1,0 +1,28 @@
+{
+  "name": "ce-002-camel-case-map",
+  "description": "Implement the CamelCaseMap class with 7 methods",
+  "category": "class-implementation",
+  "capability": "code-generation",
+  "difficulty": "advanced",
+  "timeout": 180,
+  "scoring": "partial",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 2,
+    "max_classes": 1,
+    "max_functions": 10,
+    "max_lines": 63,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "ClassEval",
+    "task_id": "ClassEval_18",
+    "class_name": "CamelCaseMap",
+    "license": "Apache-2.0"
+  }
+}

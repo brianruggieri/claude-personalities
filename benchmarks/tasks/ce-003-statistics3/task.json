@@ -1,0 +1,28 @@
+{
+  "name": "ce-003-statistics3",
+  "description": "Implement the Statistics3 class with 7 methods",
+  "category": "class-implementation",
+  "capability": "code-generation",
+  "difficulty": "expert",
+  "timeout": 180,
+  "scoring": "partial",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 2,
+    "max_classes": 1,
+    "max_functions": 9,
+    "max_lines": 180,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "ClassEval",
+    "task_id": "ClassEval_81",
+    "class_name": "Statistics3",
+    "license": "Apache-2.0"
+  }
+}

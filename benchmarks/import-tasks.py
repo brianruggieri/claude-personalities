@@ -783,8 +783,243 @@ def _build_exercism_verify(module_name):
 
 
 def import_classeval(args):
-    """Import tasks from ClassEval dataset."""
-    raise NotImplementedError("ClassEval importer not yet implemented")
+    """Import tasks from ClassEval dataset.
+
+    Selects classes with 3+ methods, sorted by method count descending.
+    """
+    source_dir = os.path.join(SOURCES_DIR, "ClassEval")
+    data_file = os.path.join(source_dir, "data", "ClassEval_data.json")
+    if not os.path.exists(data_file):
+        print(f"ERROR: {data_file} not found.")
+        print("Clone it first:")
+        print(f"  git clone --depth 1 https://github.com/FudanSELab/ClassEval.git {source_dir}")
+        sys.exit(1)
+
+    # Load all entries
+    with open(data_file) as f:
+        raw = json.load(f)
+
+    # Normalize: could be list or dict
+    if isinstance(raw, dict):
+        entries = list(raw.values())
+    else:
+        entries = list(raw)
+
+    print(f"Loaded {len(entries)} ClassEval entries")
+
+    # Selection criteria: classes with 3+ methods
+    selected = []
+    for entry in entries:
+        methods = entry.get("methods_info", [])
+        if len(methods) < 3:
+            continue
+        selected.append(entry)
+
+    print(f"Auto-selected {len(selected)} entries (3+ methods)")
+
+    # Sort by method count descending
+    selected.sort(key=lambda e: len(e.get("methods_info", [])), reverse=True)
+
+    # Filter by IDs if specified
+    if args.filter:
+        filter_ids = set(x.strip() for x in args.filter.split(','))
+        selected = [e for e in selected if e['task_id'] in filter_ids]
+        print(f"Filtered to {len(selected)} entries by ID")
+
+    # Apply max limit
+    if args.max and args.max < len(selected):
+        selected = selected[:args.max]
+        print(f"Limited to first {args.max} entries")
+
+    # Import each task
+    created = 0
+    for idx, entry in enumerate(selected):
+        class_name = entry["class_name"]
+        slug = slugify(class_name)
+        name = f"ce-{idx:03d}-{slug}"
+
+        methods = entry.get("methods_info", [])
+        num_methods = len(methods)
+        solution_code = entry["solution_code"]
+
+        # Type guard: import_statement can be str or list
+        imports = entry.get("import_statement", [])
+        if isinstance(imports, str):
+            imports = [imports] if imports else []
+
+        sol_lines = len([l for l in solution_code.strip().split('\n') if l.strip()])
+        difficulty = difficulty_from_lines(sol_lines)
+        complexity = estimate_complexity(solution_code)
+
+        # task.json
+        task_json = {
+            "name": name,
+            "description": f"Implement the {class_name} class with {num_methods} methods",
+            "category": "class-implementation",
+            "capability": "code-generation",
+            "difficulty": difficulty,
+            "timeout": 180,
+            "scoring": "partial",
+            "metrics": ["correctness", "cost", "duration", "token_efficiency"],
+            "expected_complexity": complexity,
+            "source": {
+                "dataset": "ClassEval",
+                "task_id": entry["task_id"],
+                "class_name": class_name,
+                "license": "Apache-2.0"
+            }
+        }
+
+        # prompt.md — describe the class and list methods
+        method_lines = []
+        for m in methods:
+            desc = m.get("method_description", "").strip()
+            # Take just the first line of description if multi-line
+            first_line = desc.split('\n')[0].strip().strip('"').strip("'").strip()
+            if first_line:
+                method_lines.append(f"- `{m['method_name']}`: {first_line}")
+            else:
+                method_lines.append(f"- `{m['method_name']}`")
+
+        class_desc = entry.get("class_description", "").strip().strip('"').strip()
+        prompt_md = (
+            f"Implement the `{class_name}` class in `solution.py`.\n\n"
+            f"{class_desc}\n\n"
+            f"## Methods to implement\n\n"
+            + "\n".join(method_lines) + "\n\n"
+            f"Tests are in `test_solution.py`.\n"
+            f"Run with: `python3 -m pytest test_solution.py -v`\n\n"
+            f"Do not modify test_solution.py.\n"
+        )
+
+        # fixture/solution.py — import statements + skeleton code
+        solution_parts = []
+        if imports:
+            solution_parts.append("\n".join(imports))
+            solution_parts.append("")
+        skeleton = entry.get("skeleton", "")
+        # The skeleton typically already includes imports; strip them to avoid duplication
+        skeleton_lines = skeleton.strip().split('\n')
+        skeleton_body = []
+        for line in skeleton_lines:
+            stripped = line.strip()
+            if stripped.startswith("import ") or stripped.startswith("from "):
+                continue
+            skeleton_body.append(line)
+        # Remove leading blank lines after stripping imports
+        while skeleton_body and not skeleton_body[0].strip():
+            skeleton_body.pop(0)
+        solution_parts.append("\n".join(skeleton_body))
+        solution_parts.append("")
+        solution_py = "\n".join(solution_parts)
+
+        # fixture/test_solution.py — imports + test classes + unittest.main
+        test_parts = []
+        # Add the entry's import statements so tests can reference them
+        if imports:
+            for imp in imports:
+                test_parts.append(imp)
+        test_code = entry.get("test", "").strip()
+        # The test code typically starts with 'import unittest' — include as-is
+        test_parts.append(test_code)
+        test_parts.append("")
+        # Add import of the class from solution
+        # Insert the import right after 'import unittest' line
+        test_content = "\n".join(test_parts)
+        # Ensure the class is importable from solution.py
+        import_from_solution = f"from solution import {class_name}"
+        # Build final test file: stdlib imports, then import from solution, then test code
+        final_test_lines = []
+        if imports:
+            for imp in imports:
+                final_test_lines.append(imp)
+        # The test code usually starts with 'import unittest'
+        # Parse it to insert our import after the unittest import
+        test_lines = test_code.split('\n')
+        inserted = False
+        for tl in test_lines:
+            final_test_lines.append(tl)
+            if not inserted and tl.strip().startswith("import unittest"):
+                final_test_lines.append(import_from_solution)
+                inserted = True
+        if not inserted:
+            # If no 'import unittest' found, prepend both
+            final_test_lines = ["import unittest", import_from_solution] + final_test_lines
+        final_test_lines.append("")
+        final_test_lines.append('if __name__ == "__main__":')
+        final_test_lines.append("    unittest.main()")
+        final_test_lines.append("")
+        test_solution_py = "\n".join(final_test_lines)
+
+        # verify.sh
+        verify_sh = _build_classeval_verify()
+
+        # fixture files
+        fixture_files = {
+            "solution.py": solution_py,
+            "test_solution.py": test_solution_py,
+        }
+
+        # Skip if task directory already exists
+        task_dir = os.path.join(TASKS_DIR, name)
+        if os.path.isdir(task_dir) and not args.dry_run:
+            print(f"  Skipping {name} (already exists)")
+            continue
+
+        print(f"  {'[dry-run] ' if args.dry_run else ''}Creating {name} "
+              f"(methods={num_methods}, difficulty={difficulty}, lines={sol_lines})")
+        create_task_dir(name, task_json, prompt_md, verify_sh, fixture_files, dry_run=args.dry_run)
+        created += 1
+
+    print(f"\n{'Would create' if args.dry_run else 'Created'} {created} ClassEval tasks")
+
+
+def _build_classeval_verify():
+    """Build verify.sh for a ClassEval task using pytest."""
+    return (
+        '#!/usr/bin/env bash\n'
+        'set -euo pipefail\n'
+        'dir="$1"\n'
+        'scorer="$(dirname "$0")/../../score-metrics.py"\n'
+        '\n'
+        'cd "$dir"\n'
+        '\n'
+        '# Check solution.py exists\n'
+        'if [ ! -f "solution.py" ]; then\n'
+        '\techo "FAIL: solution.py not found"\n'
+        '\techo "SCORE:0"\n'
+        '\texit 1\n'
+        'fi\n'
+        '\n'
+        '# Run pytest\n'
+        'output="$(python3 -m pytest test_solution.py -v 2>&1)" || true\n'
+        'echo "$output"\n'
+        '\n'
+        '# Count PASSED and FAILED\n'
+        'passed="$(echo "$output" | grep -c "PASSED" || true)"\n'
+        'failed="$(echo "$output" | grep -c "FAILED" || true)"\n'
+        'total=$(( passed + failed ))\n'
+        '\n'
+        '# Calculate score\n'
+        'if [ "$total" -gt 0 ]; then\n'
+        '\tscore=$(( passed * 100 / total ))\n'
+        'else\n'
+        '\tscore=0\n'
+        'fi\n'
+        '\n'
+        '# Run shared metrics\n'
+        'python3 "$scorer" "$dir" \'["solution.py", "test_solution.py"]\' "python" 2>/dev/null || true\n'
+        '\n'
+        'if [ "$passed" -eq "$total" ] && [ "$total" -gt 0 ]; then\n'
+        '\techo "PASS"\n'
+        '\techo "SCORE:$score"\n'
+        '\texit 0\n'
+        'else\n'
+        '\techo "FAIL: $passed/$total tests passed"\n'
+        '\techo "SCORE:$score"\n'
+        '\texit 1\n'
+        'fi\n'
+    )
 
 
 def import_refactoring(args):
