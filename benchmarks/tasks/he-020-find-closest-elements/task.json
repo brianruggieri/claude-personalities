@@ -1,0 +1,28 @@
+{
+  "name": "he-020-find-closest-elements",
+  "description": "Complete the find_closest_elements function",
+  "category": "function-completion",
+  "capability": "code-generation",
+  "difficulty": "intermediate",
+  "timeout": 120,
+  "scoring": "binary",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 2,
+    "max_classes": 0,
+    "max_functions": 3,
+    "max_lines": 42,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "HumanEval",
+    "task_id": "HumanEval/20",
+    "entry_point": "find_closest_elements",
+    "license": "MIT"
+  }
+}

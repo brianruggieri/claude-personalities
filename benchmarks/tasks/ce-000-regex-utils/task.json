@@ -1,0 +1,28 @@
+{
+  "name": "ce-000-regex-utils",
+  "description": "Implement the RegexUtils class with 10 methods",
+  "category": "class-implementation",
+  "capability": "code-generation",
+  "difficulty": "expert",
+  "timeout": 180,
+  "scoring": "partial",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 2,
+    "max_classes": 1,
+    "max_functions": 12,
+    "max_lines": 96,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "ClassEval",
+    "task_id": "ClassEval_72",
+    "class_name": "RegexUtils",
+    "license": "Apache-2.0"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "rf-004-model-admin-checks-check-list-display-item",
+  "description": "Extract ModelAdminChecks._check_list_display_item to a top-level function",
+  "category": "refactoring",
+  "capability": "code-quality",
+  "difficulty": "expert",
+  "timeout": 180,
+  "scoring": "binary",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 1,
+    "max_classes": 0,
+    "max_functions": 0,
+    "max_lines": 1255,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "Aider-Refactoring",
+    "task_dir": "checks_ModelAdminChecks__check_list_display_item",
+    "class_name": "ModelAdminChecks",
+    "method": "_check_list_display_item",
+    "license": "Apache-2.0"
+  }
+}

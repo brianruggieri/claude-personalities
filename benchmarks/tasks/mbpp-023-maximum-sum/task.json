@@ -1,0 +1,28 @@
+{
+  "name": "mbpp-023-maximum-sum",
+  "description": "Write a python function to find the maximum sum of elements of list in a list of lists.",
+  "category": "function-completion",
+  "capability": "code-generation",
+  "difficulty": "basic",
+  "timeout": 120,
+  "scoring": "binary",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 2,
+    "max_classes": 0,
+    "max_functions": 3,
+    "max_lines": 30,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "MBPP",
+    "task_id": 23,
+    "entry_point": "maximum_Sum",
+    "license": "CC-BY-4.0"
+  }
+}

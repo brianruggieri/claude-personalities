@@ -1,0 +1,28 @@
+{
+  "name": "he-006-parse-nested-parens",
+  "description": "Complete the parse_nested_parens function",
+  "category": "function-completion",
+  "capability": "code-generation",
+  "difficulty": "intermediate",
+  "timeout": 120,
+  "scoring": "binary",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 2,
+    "max_classes": 0,
+    "max_functions": 3,
+    "max_lines": 33,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "HumanEval",
+    "task_id": "HumanEval/6",
+    "entry_point": "parse_nested_parens",
+    "license": "MIT"
+  }
+}

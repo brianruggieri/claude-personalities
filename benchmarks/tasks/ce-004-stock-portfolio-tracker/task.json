@@ -1,0 +1,28 @@
+{
+  "name": "ce-004-stock-portfolio-tracker",
+  "description": "Implement the StockPortfolioTracker class with 7 methods",
+  "category": "class-implementation",
+  "capability": "code-generation",
+  "difficulty": "expert",
+  "timeout": 180,
+  "scoring": "partial",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 2,
+    "max_classes": 1,
+    "max_functions": 10,
+    "max_lines": 132,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "ClassEval",
+    "task_id": "ClassEval_82",
+    "class_name": "StockPortfolioTracker",
+    "license": "Apache-2.0"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "ex-rectangles",
+  "description": "Implement the rectangles exercise",
+  "category": "implementation",
+  "capability": "code-generation",
+  "difficulty": "expert",
+  "timeout": 180,
+  "scoring": "partial",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 2,
+    "max_classes": 1,
+    "max_functions": 11,
+    "max_lines": 249,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "Exercism",
+    "exercise": "rectangles",
+    "track": "python",
+    "license": "Apache-2.0"
+  }
+}

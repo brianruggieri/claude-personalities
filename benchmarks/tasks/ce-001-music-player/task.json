@@ -1,0 +1,28 @@
+{
+  "name": "ce-001-music-player",
+  "description": "Implement the MusicPlayer class with 8 methods",
+  "category": "class-implementation",
+  "capability": "code-generation",
+  "difficulty": "expert",
+  "timeout": 180,
+  "scoring": "partial",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 2,
+    "max_classes": 1,
+    "max_functions": 11,
+    "max_lines": 165,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "ClassEval",
+    "task_id": "ClassEval_61",
+    "class_name": "MusicPlayer",
+    "license": "Apache-2.0"
+  }
+}

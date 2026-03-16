@@ -1,0 +1,29 @@
+{
+  "name": "rf-002-gradient-checker-assert-infer-tensor-checks",
+  "description": "Extract GradientChecker._assertInferTensorChecks to a top-level function",
+  "category": "refactoring",
+  "capability": "code-quality",
+  "difficulty": "intermediate",
+  "timeout": 180,
+  "scoring": "binary",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 1,
+    "max_classes": 0,
+    "max_functions": 0,
+    "max_lines": 354,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "Aider-Refactoring",
+    "task_dir": "gradient_checker_GradientChecker__assertInferTensorChecks",
+    "class_name": "GradientChecker",
+    "method": "_assertInferTensorChecks",
+    "license": "Apache-2.0"
+  }
+}
