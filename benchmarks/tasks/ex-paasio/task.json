@@ -1,0 +1,28 @@
+{
+  "name": "ex-paasio",
+  "description": "Implement the paasio exercise",
+  "category": "implementation",
+  "capability": "code-generation",
+  "difficulty": "expert",
+  "timeout": 180,
+  "scoring": "partial",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 2,
+    "max_classes": 2,
+    "max_functions": 22,
+    "max_lines": 234,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "Exercism",
+    "exercise": "paasio",
+    "track": "python",
+    "license": "Apache-2.0"
+  }
+}

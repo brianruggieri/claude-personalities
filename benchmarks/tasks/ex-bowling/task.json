@@ -1,0 +1,28 @@
+{
+  "name": "ex-bowling",
+  "description": "Implement the bowling exercise",
+  "category": "implementation",
+  "capability": "code-generation",
+  "difficulty": "expert",
+  "timeout": 180,
+  "scoring": "partial",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 2,
+    "max_classes": 2,
+    "max_functions": 16,
+    "max_lines": 240,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "Exercism",
+    "exercise": "bowling",
+    "track": "python",
+    "license": "Apache-2.0"
+  }
+}

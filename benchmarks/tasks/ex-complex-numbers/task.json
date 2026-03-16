@@ -1,0 +1,28 @@
+{
+  "name": "ex-complex-numbers",
+  "description": "Implement the complex-numbers exercise",
+  "category": "implementation",
+  "capability": "code-generation",
+  "difficulty": "expert",
+  "timeout": 180,
+  "scoring": "partial",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 2,
+    "max_classes": 1,
+    "max_functions": 15,
+    "max_lines": 210,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "Exercism",
+    "exercise": "complex-numbers",
+    "track": "python",
+    "license": "Apache-2.0"
+  }
+}

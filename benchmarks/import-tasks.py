@@ -579,8 +579,207 @@ def _build_mbpp_verify():
 
 
 def import_exercism(args):
-    """Import tasks from Exercism Python track."""
-    raise NotImplementedError("Exercism importer not yet implemented")
+    """Import tasks from Exercism Python track.
+
+    Selects exercises with multi-function solutions, scored by:
+        num_functions + num_classes*2 + sol_lines/10
+    Skips exercises scoring < 3.
+    """
+    exercises_dir = os.path.join(SOURCES_DIR, "exercism-python", "exercises", "practice")
+    if not os.path.isdir(exercises_dir):
+        print(f"ERROR: {exercises_dir} not found.")
+        print("Clone it first:")
+        print(f"  git clone --depth 1 https://github.com/exercism/python.git {os.path.join(SOURCES_DIR, 'exercism-python')}")
+        sys.exit(1)
+
+    # Scan all exercises and score them
+    scored = []
+    for exercise_name in sorted(os.listdir(exercises_dir)):
+        exercise_path = os.path.join(exercises_dir, exercise_name)
+        if not os.path.isdir(exercise_path):
+            continue
+
+        # Derive the module name (exercise names are kebab-case, modules use underscores)
+        module_name = exercise_name.replace("-", "_")
+
+        # Required files
+        example_path = os.path.join(exercise_path, ".meta", "example.py")
+        stub_path = os.path.join(exercise_path, f"{module_name}.py")
+        test_path = os.path.join(exercise_path, f"{module_name}_test.py")
+
+        if not all(os.path.exists(p) for p in [example_path, stub_path, test_path]):
+            continue
+
+        # Read the reference solution for scoring
+        with open(example_path) as f:
+            solution_code = f.read()
+
+        sol_lines = len([l for l in solution_code.strip().split('\n') if l.strip()])
+        num_functions = len(re.findall(r'^\s*def\s+', solution_code, re.MULTILINE))
+        num_classes = len(re.findall(r'^\s*class\s+', solution_code, re.MULTILINE))
+
+        complexity_score = num_functions + num_classes * 2 + sol_lines // 10
+        if complexity_score < 3:
+            continue
+
+        # Check for extra .py files that tests might depend on (beyond stub + test)
+        extra_py = []
+        for fname in os.listdir(exercise_path):
+            if fname.endswith('.py') and fname != f"{module_name}.py" and fname != f"{module_name}_test.py":
+                extra_py.append(fname)
+
+        scored.append({
+            "exercise_name": exercise_name,
+            "module_name": module_name,
+            "exercise_path": exercise_path,
+            "example_path": example_path,
+            "stub_path": stub_path,
+            "test_path": test_path,
+            "extra_py": extra_py,
+            "sol_lines": sol_lines,
+            "num_functions": num_functions,
+            "num_classes": num_classes,
+            "complexity_score": complexity_score,
+        })
+
+    # Sort by complexity descending
+    scored.sort(key=lambda x: x["complexity_score"], reverse=True)
+
+    print(f"Found {len(scored)} eligible exercises (score >= 3)")
+
+    # Filter by name if specified
+    if args.filter:
+        filter_names = set(x.strip() for x in args.filter.split(','))
+        scored = [e for e in scored if e["exercise_name"] in filter_names]
+        print(f"Filtered to {len(scored)} exercises by name")
+
+    # Apply max limit
+    if args.max and args.max < len(scored):
+        scored = scored[:args.max]
+        print(f"Limited to top {args.max} exercises by complexity")
+
+    # Import each exercise
+    created = 0
+    for entry in scored:
+        exercise_name = entry["exercise_name"]
+        module_name = entry["module_name"]
+        name = f"ex-{exercise_name}"
+
+        # Skip if task directory already exists
+        task_dir = os.path.join(TASKS_DIR, name)
+        if os.path.isdir(task_dir) and not args.dry_run:
+            print(f"  Skipping {name} (already exists)")
+            continue
+
+        # Read source files
+        with open(entry["stub_path"]) as f:
+            stub_code = f.read()
+        with open(entry["test_path"]) as f:
+            test_code = f.read()
+        with open(entry["example_path"]) as f:
+            solution_code = f.read()
+
+        difficulty = difficulty_from_lines(entry["sol_lines"])
+        complexity = estimate_complexity(solution_code)
+
+        # task.json
+        task_json = {
+            "name": name,
+            "description": f"Implement the {exercise_name} exercise",
+            "category": "implementation",
+            "capability": "code-generation",
+            "difficulty": difficulty,
+            "timeout": 180,
+            "scoring": "partial",
+            "metrics": ["correctness", "cost", "duration", "token_efficiency"],
+            "expected_complexity": complexity,
+            "source": {
+                "dataset": "Exercism",
+                "exercise": exercise_name,
+                "track": "python",
+                "license": "Apache-2.0"
+            }
+        }
+
+        # prompt.md
+        prompt_md = (
+            f"Implement the solution in `{module_name}.py`.\n"
+            f"Run tests with `python3 -m pytest {module_name}_test.py -v`\n\n"
+            f"Do not modify {module_name}_test.py.\n"
+        )
+
+        # verify.sh
+        verify_sh = _build_exercism_verify(module_name)
+
+        # fixture files
+        fixture_files = {
+            f"{module_name}.py": stub_code,
+            f"{module_name}_test.py": test_code,
+        }
+
+        # Copy any extra .py files the tests depend on
+        for extra_fname in entry["extra_py"]:
+            extra_path = os.path.join(entry["exercise_path"], extra_fname)
+            with open(extra_path) as f:
+                fixture_files[extra_fname] = f.read()
+
+        print(f"  {'[dry-run] ' if args.dry_run else ''}Creating {name} "
+              f"(score={entry['complexity_score']}, difficulty={difficulty}, "
+              f"funcs={entry['num_functions']}, classes={entry['num_classes']}, "
+              f"lines={entry['sol_lines']})")
+
+        create_task_dir(name, task_json, prompt_md, verify_sh, fixture_files, dry_run=args.dry_run)
+        created += 1
+
+    print(f"\n{'Would create' if args.dry_run else 'Created'} {created} Exercism tasks")
+
+
+def _build_exercism_verify(module_name):
+    """Build verify.sh for an Exercism task using pytest."""
+    return (
+        '#!/usr/bin/env bash\n'
+        'set -euo pipefail\n'
+        'dir="$1"\n'
+        'scorer="$(dirname "$0")/../../score-metrics.py"\n'
+        '\n'
+        'cd "$dir"\n'
+        '\n'
+        '# Check module file exists\n'
+        f'if [ ! -f "{module_name}.py" ]; then\n'
+        f'\techo "FAIL: {module_name}.py not found"\n'
+        '\techo "SCORE:0"\n'
+        '\texit 1\n'
+        'fi\n'
+        '\n'
+        '# Run pytest\n'
+        f'output="$(python3 -m pytest {module_name}_test.py -v 2>&1)" || true\n'
+        'echo "$output"\n'
+        '\n'
+        '# Count PASSED and FAILED\n'
+        'passed="$(echo "$output" | grep -c "PASSED" || true)"\n'
+        'failed="$(echo "$output" | grep -c "FAILED" || true)"\n'
+        'total=$(( passed + failed ))\n'
+        '\n'
+        '# Calculate score\n'
+        'if [ "$total" -gt 0 ]; then\n'
+        '\tscore=$(( passed * 100 / total ))\n'
+        'else\n'
+        '\tscore=0\n'
+        'fi\n'
+        '\n'
+        '# Run shared metrics\n'
+        f'python3 "$scorer" "$dir" \'["{module_name}.py", "{module_name}_test.py"]\' "python" 2>/dev/null || true\n'
+        '\n'
+        'if [ "$passed" -eq "$total" ] && [ "$total" -gt 0 ]; then\n'
+        '\techo "PASS"\n'
+        '\techo "SCORE:$score"\n'
+        '\texit 0\n'
+        'else\n'
+        '\techo "FAIL: $passed/$total tests passed"\n'
+        '\techo "SCORE:$score"\n'
+        '\texit 1\n'
+        'fi\n'
+    )
 
 
 def import_classeval(args):
