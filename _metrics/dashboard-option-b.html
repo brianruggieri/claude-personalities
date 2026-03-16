@@ -279,8 +279,8 @@
 <div class="dashboard">
 
 	<div class="header">
-		<h1>Claude Personalities &mdash; Benchmark Dashboard (Option B: 5 Tasks)</h1>
-		<div class="subtitle">Generated 2026-03-16 &bull; Profiles: blank, main, opinionated &bull; 5 benchmark tasks &bull; n=4 per cell (median values)</div>
+		<h1>Claude Personalities &mdash; Benchmark Dashboard (9 Tasks)</h1>
+		<div class="subtitle">Generated 2026-03-16 &bull; Profiles: blank, main, opinionated &bull; 9 benchmark tasks (5 with data, 4 pending) &bull; n=4 per cell (median values)</div>
 	</div>
 
 	<!-- Total Cost Summary Cards -->
@@ -392,12 +392,12 @@
 		</div>
 
 		<p class="methodology">
-			<strong>Methodology:</strong> 3 Claude Code profiles (blank, main, opinionated) &times; 5 benchmark tasks &times; 4 repetitions = 60 total runs.
+			<strong>Methodology:</strong> 3 Claude Code profiles (blank, main, opinionated) &times; 9 benchmark tasks. Original 5 tasks: n=4. New 4 high-design-latitude tasks: pending experiment.
 			All profiles use Claude Opus 4.6 with identical task prompts and verification scripts. The only independent variable is the personality configuration injected via <code>--append-system-prompt</code>.
 			Metrics are median values with IQR ranges; statistical claims require non-overlapping IQRs.
 			Code quality measured via 9 zero-cost Python analyzers (no LLM scoring). Full source: <code>benchmarks/analyzers/</code>.
 			<br><br>
-			<strong>Limitations:</strong> 5-task subset of a 53-task suite. 4 of 5 tasks showed no differentiation (low design latitude). A follow-up experiment with higher design-latitude tasks (ex-react, ce-003-statistics3, ex-linked-list, ex-paasio) is planned to test whether the ex-bowling result generalizes.
+			<strong>Limitations:</strong> 5-task subset of a 53-task suite. 4 of 5 tasks showed no differentiation (low design latitude). 4 high-design-latitude tasks (ex-react, ce-003-statistics3, ex-linked-list, ex-paasio) added to test whether the ex-bowling result generalizes. Data pending.
 		</p>
 	</div>
 
@@ -411,7 +411,11 @@ const TASKS = [
 	'mbpp-011-remove-occ',
 	'ex-bowling',
 	'ce-000-regex-utils',
-	'rf-001-command-output-hash'
+	'rf-001-command-output-hash',
+	'ex-react',
+	'ce-003-statistics3',
+	'ex-linked-list',
+	'ex-paasio'
 ];
 
 const TASK_LABELS = [
@@ -419,7 +423,11 @@ const TASK_LABELS = [
 	['mbpp-011', 'remove-occ'],
 	'ex-bowling',
 	['ce-000', 'regex-utils'],
-	['rf-001', 'cmd-output-hash']
+	['rf-001', 'cmd-output-hash'],
+	'ex-react',
+	['ce-003', 'statistics3'],
+	['ex', 'linked-list'],
+	'ex-paasio'
 ];
 
 const profiles = {
@@ -432,7 +440,11 @@ const profiles = {
 			{ task: 'mbpp-011-remove-occ', cost_usd: 0.204, duration_s: 34, complexity_max: 4, cognitive_max: 3, maintainability: 57.97, naming_score: 95, overeng_score: 100, personality_compliance: 64, lines: 18, output_tokens: 972, max_func_len: 10 },
 			{ task: 'ex-bowling', cost_usd: 0.248, duration_s: 44, complexity_max: 20, cognitive_max: 34, maintainability: 19.3, naming_score: 95, overeng_score: 100, personality_compliance: 80, lines: 307, output_tokens: 1852, max_func_len: 62 },
 			{ task: 'ce-000-regex-utils', cost_usd: 0.395, duration_s: 91, complexity_max: 1, cognitive_max: 0, maintainability: 20.38, naming_score: 90, overeng_score: 100, personality_compliance: 100, lines: 372, output_tokens: 5548, max_func_len: 35 },
-			{ task: 'rf-001-command-output-hash', cost_usd: 0.253, duration_s: 40, complexity_max: 12, cognitive_max: 11, maintainability: 28.08, naming_score: 90, overeng_score: 100, personality_compliance: 87, lines: 172, output_tokens: 1604, max_func_len: 60 }
+			{ task: 'rf-001-command-output-hash', cost_usd: 0.253, duration_s: 40, complexity_max: 12, cognitive_max: 11, maintainability: 28.08, naming_score: 90, overeng_score: 100, personality_compliance: 87, lines: 172, output_tokens: 1604, max_func_len: 60 },
+			{ task: 'ex-react', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 },
+			{ task: 'ce-003-statistics3', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 },
+			{ task: 'ex-linked-list', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 },
+			{ task: 'ex-paasio', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 }
 		]
 	},
 	blank: {
@@ -444,7 +456,11 @@ const profiles = {
 			{ task: 'mbpp-011-remove-occ', cost_usd: 0.13, duration_s: 26, complexity_max: 4, cognitive_max: 4, maintainability: 57.16, naming_score: 95, overeng_score: 100, personality_compliance: 68, lines: 18, output_tokens: 939, max_func_len: 10 },
 			{ task: 'ex-bowling', cost_usd: 0.175, duration_s: 33, complexity_max: 21, cognitive_max: 33, maintainability: 19.37, naming_score: 95, overeng_score: 100, personality_compliance: 80, lines: 296, output_tokens: 1497, max_func_len: 54 },
 			{ task: 'ce-000-regex-utils', cost_usd: 0.321, duration_s: 98, complexity_max: 1, cognitive_max: 0, maintainability: 20.45, naming_score: 90, overeng_score: 100, personality_compliance: 100, lines: 370, output_tokens: 5083, max_func_len: 35 },
-			{ task: 'rf-001-command-output-hash', cost_usd: 0.15, duration_s: 28, complexity_max: 12, cognitive_max: 11, maintainability: 28.08, naming_score: 90, overeng_score: 100, personality_compliance: 87, lines: 172, output_tokens: 1160, max_func_len: 60 }
+			{ task: 'rf-001-command-output-hash', cost_usd: 0.15, duration_s: 28, complexity_max: 12, cognitive_max: 11, maintainability: 28.08, naming_score: 90, overeng_score: 100, personality_compliance: 87, lines: 172, output_tokens: 1160, max_func_len: 60 },
+			{ task: 'ex-react', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 },
+			{ task: 'ce-003-statistics3', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 },
+			{ task: 'ex-linked-list', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 },
+			{ task: 'ex-paasio', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 }
 		]
 	},
 	opinionated: {
@@ -456,7 +472,11 @@ const profiles = {
 			{ task: 'mbpp-011-remove-occ', cost_usd: 0.237, duration_s: 35, complexity_max: 4, cognitive_max: 4, maintainability: 59.22, naming_score: 85, overeng_score: 100, personality_compliance: 50, lines: 16, output_tokens: 914, max_func_len: 8 },
 			{ task: 'ex-bowling', cost_usd: 0.276, duration_s: 37, complexity_max: 8, cognitive_max: 12, maintainability: 18.59, naming_score: 95, overeng_score: 100, personality_compliance: 83, lines: 314, output_tokens: 1656, max_func_len: 19 },
 			{ task: 'ce-000-regex-utils', cost_usd: 0.397, duration_s: 76, complexity_max: 1, cognitive_max: 0, maintainability: 20.39, naming_score: 90, overeng_score: 100, personality_compliance: 100, lines: 372, output_tokens: 3730, max_func_len: 35 },
-			{ task: 'rf-001-command-output-hash', cost_usd: 0.252, duration_s: 33, complexity_max: 12, cognitive_max: 11, maintainability: 28.08, naming_score: 90, overeng_score: 100, personality_compliance: 87, lines: 172, output_tokens: 2103, max_func_len: 60 }
+			{ task: 'rf-001-command-output-hash', cost_usd: 0.252, duration_s: 33, complexity_max: 12, cognitive_max: 11, maintainability: 28.08, naming_score: 90, overeng_score: 100, personality_compliance: 87, lines: 172, output_tokens: 2103, max_func_len: 60 },
+			{ task: 'ex-react', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 },
+			{ task: 'ce-003-statistics3', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 },
+			{ task: 'ex-linked-list', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 },
+			{ task: 'ex-paasio', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 }
 		]
 	}
 };
