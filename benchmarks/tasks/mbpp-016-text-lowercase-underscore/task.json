@@ -1,0 +1,28 @@
+{
+  "name": "mbpp-016-text-lowercase-underscore",
+  "description": "Write a function to find sequences of lowercase letters joined with an underscore.",
+  "category": "function-completion",
+  "capability": "code-generation",
+  "difficulty": "basic",
+  "timeout": 120,
+  "scoring": "binary",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 2,
+    "max_classes": 0,
+    "max_functions": 3,
+    "max_lines": 30,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "MBPP",
+    "task_id": 16,
+    "entry_point": "text_lowercase_underscore",
+    "license": "CC-BY-4.0"
+  }
+}

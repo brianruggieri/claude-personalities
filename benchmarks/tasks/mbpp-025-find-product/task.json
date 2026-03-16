@@ -1,0 +1,28 @@
+{
+  "name": "mbpp-025-find-product",
+  "description": "Write a python function to find the product of non-repeated elements in a given array.",
+  "category": "function-completion",
+  "capability": "code-generation",
+  "difficulty": "basic",
+  "timeout": 120,
+  "scoring": "binary",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 2,
+    "max_classes": 0,
+    "max_functions": 3,
+    "max_lines": 30,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "MBPP",
+    "task_id": 25,
+    "entry_point": "find_Product",
+    "license": "CC-BY-4.0"
+  }
+}

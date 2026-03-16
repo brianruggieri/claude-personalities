@@ -1,0 +1,28 @@
+{
+  "name": "mbpp-018-remove-dirty-chars",
+  "description": "Write a function to remove characters from the first string which are present in the second string.",
+  "category": "function-completion",
+  "capability": "code-generation",
+  "difficulty": "advanced",
+  "timeout": 120,
+  "scoring": "binary",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 2,
+    "max_classes": 0,
+    "max_functions": 6,
+    "max_lines": 78,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "MBPP",
+    "task_id": 18,
+    "entry_point": "remove_dirty_chars",
+    "license": "CC-BY-4.0"
+  }
+}

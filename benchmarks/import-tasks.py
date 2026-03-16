@@ -331,7 +331,251 @@ def _build_he_verify():
 
 def import_mbpp(args):
     """Import tasks from Google MBPP dataset."""
-    raise NotImplementedError("MBPP importer not yet implemented")
+    source_file = os.path.join(SOURCES_DIR, "mbpp.jsonl")
+    if not os.path.exists(source_file):
+        print(f"ERROR: {source_file} not found.")
+        print("Download it first:")
+        print(f"  mkdir -p {SOURCES_DIR}")
+        print(f"  curl -L https://raw.githubusercontent.com/google-research/google-research/master/mbpp/mbpp.jsonl -o {SOURCES_DIR}/mbpp.jsonl")
+        sys.exit(1)
+
+    # Load all entries
+    entries = []
+    with open(source_file) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                entries.append(json.loads(line))
+
+    print(f"Loaded {len(entries)} MBPP entries")
+
+    # Filter by IDs if specified
+    if args.filter:
+        filter_ids = set(int(x.strip()) for x in args.filter.split(','))
+        entries = [e for e in entries if e['task_id'] in filter_ids]
+        print(f"Filtered to {len(entries)} entries by ID")
+    else:
+        # Skip first 10 entries (few-shot prompt examples)
+        entries = entries[10:]
+        print(f"Skipped first 10 few-shot examples, {len(entries)} remaining")
+
+    # Auto-select: require 3+ tests, solution 5-30 lines
+    selected = []
+    for entry in entries:
+        code = entry['code'].replace('\r\n', '\n').replace('\r', '\n')
+        sol_lines = len([l for l in code.strip().split('\n') if l.strip()])
+        num_tests = len(entry.get('test_list', []))
+        if num_tests < 3:
+            continue
+        if sol_lines < 5:
+            continue
+        if sol_lines > 30:
+            continue
+        selected.append(entry)
+
+    print(f"Auto-selected {len(selected)} entries (3+ tests, 5-30 solution lines)")
+
+    # Apply max limit
+    if args.max and args.max < len(selected):
+        selected = selected[:args.max]
+        print(f"Limited to first {args.max} entries")
+
+    # Import each task
+    created = 0
+    for entry in selected:
+        task_id = entry['task_id']
+        code = entry['code'].replace('\r\n', '\n').replace('\r', '\n')
+        text = entry['text']
+        test_list = entry.get('test_list', [])
+
+        # Extract the primary function name from the test assertions
+        func_name = _mbpp_extract_func_name(test_list, code)
+        if not func_name:
+            print(f"  Skipping task_id={task_id} (could not determine function name)")
+            continue
+
+        slug = slugify(func_name)
+        name = f"mbpp-{task_id:03d}-{slug}"
+
+        sol_lines = len([l for l in code.strip().split('\n') if l.strip()])
+        difficulty = difficulty_from_lines(sol_lines)
+        complexity = estimate_complexity(code)
+
+        # task.json
+        task_json = {
+            "name": name,
+            "description": text,
+            "category": "function-completion",
+            "capability": "code-generation",
+            "difficulty": difficulty,
+            "timeout": 120,
+            "scoring": "binary",
+            "metrics": ["correctness", "cost", "duration", "token_efficiency"],
+            "expected_complexity": complexity,
+            "source": {
+                "dataset": "MBPP",
+                "task_id": task_id,
+                "entry_point": func_name,
+                "license": "CC-BY-4.0"
+            }
+        }
+
+        # prompt.md
+        prompt_md = textwrap.dedent(f"""\
+            {text}
+
+            Write your solution in `solution.py`. The function should be named `{func_name}`.
+            Tests are in `test_solution.py`.
+            Run with: `python3 test_solution.py`
+
+            Do not modify test_solution.py.
+        """)
+
+        # fixture/solution.py — stub with imports + function signature + pass
+        solution_py = _mbpp_build_stub(func_name, code)
+
+        # fixture/test_solution.py
+        test_solution_py = _mbpp_build_test(func_name, code, test_list)
+
+        # verify.sh
+        verify_sh = _build_mbpp_verify()
+
+        # fixture files
+        fixture_files = {
+            "solution.py": solution_py,
+            "test_solution.py": test_solution_py,
+        }
+
+        # Skip if task directory already exists
+        task_dir = os.path.join(TASKS_DIR, name)
+        if os.path.isdir(task_dir) and not args.dry_run:
+            print(f"  Skipping {name} (already exists)")
+            continue
+
+        print(f"  {'[dry-run] ' if args.dry_run else ''}Creating {name} (difficulty={difficulty}, lines={sol_lines})")
+        create_task_dir(name, task_json, prompt_md, verify_sh, fixture_files, dry_run=args.dry_run)
+        created += 1
+
+    print(f"\n{'Would create' if args.dry_run else 'Created'} {created} MBPP tasks")
+
+
+def _mbpp_extract_func_name(test_list, code):
+    """Extract the primary function name from MBPP test assertions.
+
+    Tries the test assertions first (most reliable), then falls back
+    to the last top-level def in the code.
+    """
+    # Try to extract from the first test assertion: assert func_name(...)
+    for test in test_list:
+        m = re.search(r'assert\s+(\w+)\s*\(', test)
+        if m:
+            return m.group(1)
+        # Handle assert ... == func_name(...) patterns
+        m = re.search(r'==\s*(\w+)\s*\(', test)
+        if m:
+            return m.group(1)
+
+    # Fall back to last top-level function def in the code
+    funcs = re.findall(r'^def\s+(\w+)\s*\(', code, re.MULTILINE)
+    if funcs:
+        return funcs[-1]
+
+    return None
+
+
+def _mbpp_build_stub(func_name, code):
+    """Build solution.py stub from MBPP solution code.
+
+    Extracts imports and the target function's signature, returns a stub
+    with `pass` as the body. Also includes any global constants or helper
+    code that appear before the target function.
+    """
+    lines = code.strip().split('\n')
+
+    # Collect import lines
+    imports = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith('import ') or stripped.startswith('from '):
+            imports.append(stripped)
+
+    # Find the target function's def line to extract the full signature
+    sig_line = None
+    for line in lines:
+        # Match def func_name(... — could be indented in the original
+        m = re.match(r'^(?:def\s+)' + re.escape(func_name) + r'\s*\(', line.strip())
+        if m:
+            sig_line = line.strip()
+            break
+
+    if not sig_line:
+        # Fallback: just create a basic signature
+        sig_line = f"def {func_name}():"
+
+    # Ensure the signature ends with colon
+    if not sig_line.endswith(':'):
+        sig_line += ':'
+
+    parts = []
+    if imports:
+        parts.append('\n'.join(imports))
+        parts.append('')
+        parts.append('')
+    parts.append(sig_line)
+    parts.append('    pass')
+    parts.append('')
+
+    return '\n'.join(parts)
+
+
+def _mbpp_build_test(func_name, code, test_list):
+    """Build test_solution.py for an MBPP task.
+
+    Uses `from solution import *` so all functions and globals are available
+    to the test assertions.
+    """
+    lines = []
+    lines.append("from solution import *")
+    lines.append("")
+    lines.append("")
+
+    # Add each test assertion
+    for test in test_list:
+        test = test.strip()
+        lines.append(test)
+
+    lines.append("")
+    lines.append('print("ALL_TESTS_PASSED")')
+    lines.append("")
+
+    return '\n'.join(lines)
+
+
+def _build_mbpp_verify():
+    """Build verify.sh for an MBPP task."""
+    return (
+        '#!/usr/bin/env bash\n'
+        'set -euo pipefail\n'
+        'dir="$1"\n'
+        'scorer="$(dirname "$0")/../../score-metrics.py"\n'
+        '\n'
+        'cd "$dir"\n'
+        'output="$(python3 test_solution.py 2>&1)" || true\n'
+        'echo "$output"\n'
+        '\n'
+        '# Run shared metrics\n'
+        'python3 "$scorer" "$dir" \'["solution.py", "test_solution.py"]\' "python" 2>/dev/null || true\n'
+        '\n'
+        'if echo "$output" | grep -q "ALL_TESTS_PASSED"; then\n'
+        '\techo "PASS"\n'
+        '\techo "SCORE:100"\n'
+        '\texit 0\n'
+        'else\n'
+        '\techo "FAIL"\n'
+        '\techo "SCORE:0"\n'
+        '\texit 1\n'
+        'fi\n'
+    )
 
 
 def import_exercism(args):
