@@ -9,3 +9,4 @@ _metrics/
 home/.claude.json
 claude/fetch-claude-usage.swift
 __pycache__/
+benchmarks/sources/
