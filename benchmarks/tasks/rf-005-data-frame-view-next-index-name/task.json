@@ -1,0 +1,29 @@
+{
+  "name": "rf-005-data-frame-view-next-index-name",
+  "description": "Extract DataFrameView.next_index_name to a top-level function",
+  "category": "refactoring",
+  "capability": "code-quality",
+  "difficulty": "expert",
+  "timeout": 180,
+  "scoring": "binary",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 1,
+    "max_classes": 0,
+    "max_functions": 0,
+    "max_lines": 2004,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "Aider-Refactoring",
+    "task_dir": "dataframeeditor_DataFrameView_next_index_name",
+    "class_name": "DataFrameView",
+    "method": "next_index_name",
+    "license": "Apache-2.0"
+  }
+}

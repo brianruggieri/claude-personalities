@@ -1,0 +1,28 @@
+{
+  "name": "he-035-max-element",
+  "description": "Complete the max_element function",
+  "category": "function-completion",
+  "capability": "code-generation",
+  "difficulty": "basic",
+  "timeout": 120,
+  "scoring": "binary",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 2,
+    "max_classes": 0,
+    "max_functions": 3,
+    "max_lines": 30,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "HumanEval",
+    "task_id": "HumanEval/35",
+    "entry_point": "max_element",
+    "license": "MIT"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "ex-alphametics",
+  "description": "Implement the alphametics exercise",
+  "category": "implementation",
+  "capability": "code-generation",
+  "difficulty": "expert",
+  "timeout": 180,
+  "scoring": "partial",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 2,
+    "max_classes": 0,
+    "max_functions": 5,
+    "max_lines": 507,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "Exercism",
+    "exercise": "alphametics",
+    "track": "python",
+    "license": "Apache-2.0"
+  }
+}

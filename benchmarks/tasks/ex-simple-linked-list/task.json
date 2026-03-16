@@ -1,0 +1,28 @@
+{
+  "name": "ex-simple-linked-list",
+  "description": "Implement the simple-linked-list exercise",
+  "category": "implementation",
+  "capability": "code-generation",
+  "difficulty": "expert",
+  "timeout": 180,
+  "scoring": "partial",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 2,
+    "max_classes": 4,
+    "max_functions": 17,
+    "max_lines": 168,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "Exercism",
+    "exercise": "simple-linked-list",
+    "track": "python",
+    "license": "Apache-2.0"
+  }
+}

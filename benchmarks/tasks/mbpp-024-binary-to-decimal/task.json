@@ -1,0 +1,28 @@
+{
+  "name": "mbpp-024-binary-to-decimal",
+  "description": "Write a function to convert the given binary number to its decimal equivalent.",
+  "category": "function-completion",
+  "capability": "code-generation",
+  "difficulty": "intermediate",
+  "timeout": 120,
+  "scoring": "binary",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 2,
+    "max_classes": 0,
+    "max_functions": 3,
+    "max_lines": 30,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "MBPP",
+    "task_id": 24,
+    "entry_point": "binary_to_decimal",
+    "license": "CC-BY-4.0"
+  }
+}
