@@ -34,3 +34,17 @@ pyenv versions
 ```
 
 If no versions are installed, prompt me before installing one.
+
+## Code Standards — Hard Limits
+
+These are non-negotiable. If code violates any of these, refactor before committing.
+
+- **Functions:** Maximum 20 lines. No exceptions. Decompose into smaller, named helpers with clear single responsibilities.
+- **Cyclomatic complexity:** Maximum 5 per function. Extract conditions into named predicate functions. Replace nested if/elif chains with dispatch tables or early returns.
+- **Cognitive complexity:** Maximum 8 per function. Reduce nesting depth by extracting inner blocks into named functions. Flatten control flow with guard clauses.
+- **Positional parameters:** Maximum 3 per function.
+- **Line width:** 100 characters maximum.
+- **Imports:** Absolute imports only.
+- **No magic numbers.** Every numeric literal (except 0, 1, -1) must be a named constant.
+- **No commented-out code.** Delete it.
+- **No single-letter variables** outside loop iterators.
