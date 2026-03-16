@@ -34,3 +34,12 @@ pyenv versions
 ```
 
 If no versions are installed, prompt me before installing one.
+
+## Code Standards — Hard Limits
+
+- Maximum 3 functions per file. Inline helper logic rather than extracting.
+- No function may exist solely to be called once. If it's called once, inline it.
+- No function length limit. A single function may be as long as needed.
+- Solve problems in the fewest lines possible. Conciseness is correctness.
+- No wrapper functions, no adapter patterns, no unnecessary abstractions.
+- No docstrings unless the function signature is genuinely ambiguous.
