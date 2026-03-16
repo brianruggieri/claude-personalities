@@ -14,6 +14,24 @@ REPS=3
 VARIANTS=(tdd-only limits-only planning-only)
 ORIGINAL_BRANCH=$(git branch --show-current)
 
+# Stash any uncommitted changes so git checkout works
+STASHED=false
+if ! git diff --quiet 2>/dev/null; then
+	echo "Stashing uncommitted changes..."
+	git stash push -m "isolation-experiment-autostash" --quiet
+	STASHED=true
+fi
+
+# Restore stash and branch on exit (even on failure)
+cleanup() {
+	git checkout "$ORIGINAL_BRANCH" 2>/dev/null || true
+	if $STASHED; then
+		echo "Restoring stashed changes..."
+		git stash pop --quiet 2>/dev/null || true
+	fi
+}
+trap cleanup EXIT
+
 echo "╔══════════════════════════════════════════════════════╗"
 echo "║  Isolation Experiment: ex-bowling only               ║"
 echo "║  4 profiles × 3 reps = 12 runs                      ║"
@@ -88,8 +106,7 @@ for rep in $(seq 1 $REPS); do
 	done
 done
 
-# Return to original branch
-git checkout "$ORIGINAL_BRANCH" 2>/dev/null
+# cleanup trap handles branch restore and stash pop
 
 ELAPSED=$(( $(date +%s) - START_TIME ))
 MINUTES=$(( ELAPSED / 60 ))
