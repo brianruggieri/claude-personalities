@@ -9,9 +9,19 @@ set -euo pipefail
 # Run from a regular terminal (NOT inside Claude Code):
 #   cd ~/git/claude_personalities && ./run-isolation-experiment.sh
 
-TASK="ex-bowling"
+TASKS=(
+	he-000-has-close-elements
+	mbpp-011-remove-occ
+	ex-bowling
+	ce-000-regex-utils
+	rf-001-command-output-hash
+	ex-react
+	ce-003-statistics3
+	ex-linked-list
+	ex-paasio
+)
 REPS=3
-VARIANTS=(tdd-only limits-only planning-only)
+VARIANTS=(limits-amplified)
 ORIGINAL_BRANCH=$(git branch --show-current)
 
 # Stash any uncommitted changes so git checkout works
@@ -33,9 +43,9 @@ cleanup() {
 trap cleanup EXIT
 
 echo "╔══════════════════════════════════════════════════════╗"
-echo "║  Isolation Experiment: ex-bowling only               ║"
-echo "║  4 profiles × 3 reps = 12 runs                      ║"
-echo "║  Profiles: blank, tdd-only, limits-only, planning    ║"
+echo "║  Limits-Amplified Experiment: 9 tasks                ║"
+echo "║  1 profile × 9 tasks × 3 reps = 27 runs             ║"
+echo "║  Profile: limits-amplified (max 20 lines, cc ≤ 5)   ║"
 echo "║  Started: $(date '+%Y-%m-%d %H:%M:%S')                    ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
@@ -78,8 +88,11 @@ git checkout "$ORIGINAL_BRANCH" 2>/dev/null
 echo ""
 
 # Step 2: Run the experiment
-PROFILES=(blank variant-tdd-only variant-limits-only variant-planning-only)
-TOTAL=$(( ${#PROFILES[@]} * REPS ))
+PROFILES=()
+for variant in "${VARIANTS[@]}"; do
+	PROFILES+=("variant-${variant}")
+done
+TOTAL=$(( ${#PROFILES[@]} * ${#TASKS[@]} * REPS ))
 COUNT=0
 FAILED=0
 START_TIME=$(date +%s)
@@ -89,24 +102,27 @@ echo ""
 
 for rep in $(seq 1 $REPS); do
 	for profile in "${PROFILES[@]}"; do
-		COUNT=$((COUNT + 1))
 		git checkout "$profile" 2>/dev/null
 
-		ELAPSED=$(( $(date +%s) - START_TIME ))
-		if [ "$COUNT" -gt 1 ]; then
-			AVG_PER_RUN=$(( ELAPSED / (COUNT - 1) ))
-			REMAINING=$(( (TOTAL - COUNT + 1) * AVG_PER_RUN ))
-			ETA="~$(( REMAINING / 60 ))m remaining"
-		else
-			ETA="estimating..."
-		fi
+		for task in "${TASKS[@]}"; do
+			COUNT=$((COUNT + 1))
 
-		printf "[%d/%d] rep=%d %-20s %s (%s)\n" "$COUNT" "$TOTAL" "$rep" "$profile" "$TASK" "$ETA"
+			ELAPSED=$(( $(date +%s) - START_TIME ))
+			if [ "$COUNT" -gt 1 ]; then
+				AVG_PER_RUN=$(( ELAPSED / (COUNT - 1) ))
+				REMAINING=$(( (TOTAL - COUNT + 1) * AVG_PER_RUN ))
+				ETA="~$(( REMAINING / 60 ))m remaining"
+			else
+				ETA="estimating..."
+			fi
 
-		if ! ./setup.sh benchmark --task "$TASK" > /dev/null 2>&1; then
-			echo "  ⚠ FAILED: $profile/$TASK (rep $rep)"
-			FAILED=$((FAILED + 1))
-		fi
+			printf "[%d/%d] rep=%d %-20s %-30s (%s)\n" "$COUNT" "$TOTAL" "$rep" "$profile" "$task" "$ETA"
+
+			if ! ./setup.sh benchmark --task "$task" > /dev/null 2>&1; then
+				echo "  ⚠ FAILED: $profile/$task (rep $rep)"
+				FAILED=$((FAILED + 1))
+			fi
+		done
 	done
 done
 
@@ -124,6 +140,6 @@ echo "║  Duration: ${MINUTES}m ${SECONDS_REM}s                                
 echo "║  Finished: $(date '+%Y-%m-%d %H:%M:%S')                   ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
-echo "Results in: _metrics/benchmarks/{blank,variant-tdd-only,variant-limits-only,variant-planning-only}/ex-bowling/"
+echo "Results in: _metrics/benchmarks/variant-limits-amplified/*/"
 echo ""
 echo "Next: Come back to Claude Code to analyze results."
