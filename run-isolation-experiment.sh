@@ -40,13 +40,17 @@ echo "║  Started: $(date '+%Y-%m-%d %H:%M:%S')                    ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
 
-# Step 1: Create variant branches from blank (which has benchmarks/ already)
+# Step 1: Create variant branches from blank
+# Copy variant CLAUDE.md files to a temp dir first (they only exist on main)
 echo "Setting up variant branches..."
+TMPDIR=$(mktemp -d)
+for variant in "${VARIANTS[@]}"; do
+	cp "_experiment/claude-md-${variant}.md" "$TMPDIR/"
+done
 
 for variant in "${VARIANTS[@]}"; do
 	branch="variant-${variant}"
 
-	# Check if branch exists
 	if git rev-parse --verify "$branch" >/dev/null 2>&1; then
 		echo "  Branch '$branch' already exists, updating CLAUDE.md..."
 		git checkout "$branch" 2>/dev/null
@@ -56,12 +60,11 @@ for variant in "${VARIANTS[@]}"; do
 		git checkout -b "$branch" 2>/dev/null
 	fi
 
-	# Copy the variant CLAUDE.md
-	cp "_experiment/claude-md-${variant}.md" "claude/CLAUDE.md"
+	# Copy from temp dir (survives branch switch)
+	cp "$TMPDIR/claude-md-${variant}.md" "claude/CLAUDE.md"
 	git add claude/CLAUDE.md
 	git commit -m "Set up ${variant} variant profile" --allow-empty 2>/dev/null || true
 
-	# Ensure benchmarks/ exists
 	if [ ! -d "benchmarks/tasks" ]; then
 		echo "  Syncing benchmarks/ from main..."
 		git checkout main -- benchmarks/
@@ -70,6 +73,7 @@ for variant in "${VARIANTS[@]}"; do
 	fi
 done
 
+rm -rf "$TMPDIR"
 git checkout "$ORIGINAL_BRANCH" 2>/dev/null
 echo ""
 
