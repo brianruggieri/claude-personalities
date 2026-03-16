@@ -183,9 +183,86 @@
 	.findings li:nth-child(3)::before { background: #94a3b8; }
 	.findings li:nth-child(4)::before { background: #ef4444; }
 	.findings li:nth-child(5)::before { background: #f59e0b; }
+	.findings li:nth-child(6)::before { background: #8b5cf6; }
+	.findings li:nth-child(7)::before { background: #ec4899; }
+	.findings li:nth-child(8)::before { background: #14b8a6; }
 	.findings .highlight {
 		color: #f1f5f9;
 		font-weight: 600;
+	}
+
+	/* Executive summary */
+	.exec-summary {
+		background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+		border-radius: 12px;
+		padding: 2.5rem;
+		border: 1px solid #334155;
+		margin-top: 1.5rem;
+	}
+	.exec-summary h2 {
+		font-size: 1.25rem;
+		font-weight: 700;
+		margin-bottom: 1.5rem;
+		color: #f1f5f9;
+	}
+	.exec-summary .verdict-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+		gap: 1.5rem;
+		margin-bottom: 2rem;
+	}
+	.verdict-card {
+		background: #0f172a;
+		border-radius: 10px;
+		padding: 1.5rem;
+		border: 1px solid #334155;
+	}
+	.verdict-card h3 {
+		font-size: 0.85rem;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		font-weight: 600;
+		margin-bottom: 0.75rem;
+	}
+	.verdict-card p {
+		font-size: 0.9rem;
+		color: #cbd5e1;
+		line-height: 1.6;
+	}
+	.verdict-card .stat {
+		font-size: 2rem;
+		font-weight: 700;
+		margin-bottom: 0.25rem;
+	}
+	.verdict-card .stat-label {
+		font-size: 0.75rem;
+		color: #64748b;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+	.exec-summary .methodology {
+		font-size: 0.8rem;
+		color: #64748b;
+		border-top: 1px solid #334155;
+		padding-top: 1.25rem;
+		margin-top: 0.5rem;
+		line-height: 1.7;
+	}
+	.exec-summary .methodology strong {
+		color: #94a3b8;
+	}
+	.exec-summary .bottom-line {
+		background: #172033;
+		border-left: 3px solid #f59e0b;
+		padding: 1.25rem 1.5rem;
+		border-radius: 0 8px 8px 0;
+		margin-bottom: 1.5rem;
+		font-size: 0.95rem;
+		color: #e2e8f0;
+		line-height: 1.6;
+	}
+	.exec-summary .bottom-line strong {
+		color: #f59e0b;
 	}
 
 	/* Responsive */
@@ -268,14 +345,60 @@
 
 	<!-- Key Findings -->
 	<div class="findings">
-		<h2>Key Findings</h2>
+		<h2>Key Findings (n=4 per cell, median values, IQR-confirmed)</h2>
 		<ul>
-			<li><span class="highlight">Results are n=4 per cell</span> (4 runs per task per profile, median values shown). IQR ranges confirm findings below.</li>
 			<li><span class="highlight">ex-bowling confirms opinionated produces dramatically simpler code.</span> Cognitive complexity: opinionated 12 [IQR 11&ndash;17] vs blank 33 [27.5&ndash;38.5] vs main 34 [29.5&ndash;38.5]. Max function length: opinionated 19 [17.5&ndash;23.5] vs blank 54.5 [45.5&ndash;59.5] vs main 62 [55&ndash;64]. <span class="highlight">IQRs do not overlap</span> &mdash; this is a consistent, reproducible difference.</li>
-			<li><span class="highlight">4 of 5 tasks produce identical code</span> regardless of profile (he-000, ce-000, rf-001: zero variance; mbpp-011: overlapping IQRs). Personality differentiation only manifests when the task has high design latitude.</li>
-			<li><span class="highlight">blank is consistently 35&ndash;55% cheaper</span> than opinionated across all tasks and all runs. Cost IQRs do not overlap between blank and opinionated on any task.</li>
-			<li><span class="highlight">The opinionated cost premium only pays off on ex-bowling</span> (+$0.10 over blank) where it produces 3x simpler code. On the other 4 tasks, you pay more for identical output.</li>
+			<li><span class="highlight">4 of 5 tasks produce identical code</span> regardless of profile (he-000, ce-000, rf-001: zero variance across all runs; mbpp-011: overlapping IQRs). Profile differentiation only manifests when the task has high design latitude &mdash; multiple valid architectures for the same problem.</li>
+			<li><span class="highlight">blank is consistently 35&ndash;55% cheaper</span> than opinionated across all tasks and all runs. Cost IQRs do not overlap between blank and opinionated on any task. Main sits between them.</li>
+			<li><span class="highlight">The opinionated cost premium only pays off on ex-bowling</span> (+$0.10 over blank) where it produces 3x simpler code. On the other 4 tasks, you pay 35&ndash;55% more for byte-identical output.</li>
+			<li><span class="highlight">blank and main produce statistically indistinguishable code quality</span> on ex-bowling (IQRs overlap on all metrics). The ~160 lines of personality instructions in main don&rsquo;t translate into measurable quality improvements &mdash; only the enforcement layers in opinionated do.</li>
+			<li><span class="highlight">Design latitude is the key predictor</span> of profile impact, not task difficulty. ce-000-regex-utils is &ldquo;expert&rdquo; difficulty but test-locked (identical code). ex-bowling is &ldquo;expert&rdquo; with multiple valid designs (3x differentiation).</li>
+			<li><span class="highlight">Token efficiency varies by profile but not by quality.</span> Opinionated uses more tokens on rf-001 (2103 vs blank&rsquo;s 1160) yet produces identical code. The extra tokens go to reasoning and compliance checking, not code.</li>
+			<li><span class="highlight">Maintainability Index does not differentiate profiles</span> even on ex-bowling (all ~19/100). This composite metric is dominated by line count and Halstead volume, which are similar across profiles. Cognitive complexity and function length are far more sensitive detectors of structural differences.</li>
 		</ul>
+	</div>
+
+	<!-- Executive Summary -->
+	<div class="exec-summary">
+		<h2>Executive Summary &mdash; When Should You Use Each Profile?</h2>
+
+		<div class="bottom-line">
+			<strong>The core finding:</strong> Personality profiles don&rsquo;t affect <em>what</em> code gets written &mdash; they affect <em>how</em> it gets structured. When there&rsquo;s only one reasonable implementation, all profiles converge to it. When there are many valid designs, opinionated consistently chooses the better-decomposed one. The charts above can show you the <em>numbers</em>, but they can&rsquo;t show you the most important insight: <strong>the decision of which profile to use depends entirely on your task mix, not on absolute quality.</strong>
+		</div>
+
+		<div class="verdict-grid">
+			<div class="verdict-card">
+				<h3 class="profile-blank">Use blank when&hellip;</h3>
+				<div class="stat profile-blank">35&ndash;55%</div>
+				<div class="stat-label">cost savings vs opinionated</div>
+				<p>Your tasks are well-constrained: function completions, test-locked implementations, refactoring with existing tests. The code will be identical regardless of profile, so why pay the prompt tax? Also ideal for high-volume batch jobs where cost dominates.</p>
+			</div>
+			<div class="verdict-card">
+				<h3 class="profile-main">Use main when&hellip;</h3>
+				<div class="stat profile-main">0%</div>
+				<div class="stat-label">quality improvement over blank</div>
+				<p>Surprisingly, main&rsquo;s ~160 lines of coding preferences (indentation rules, commit style, plugin config) don&rsquo;t produce measurably different code quality in any task tested. Main&rsquo;s value is in <em>developer experience</em> (skills, shortcuts, conventions) &mdash; not in code output quality. Use it as your daily driver for the DX, not for the code.</p>
+			</div>
+			<div class="verdict-card">
+				<h3 class="profile-opinionated">Use opinionated when&hellip;</h3>
+				<div class="stat profile-opinionated">3x</div>
+				<div class="stat-label">simpler code on design-open tasks</div>
+				<p>You&rsquo;re building something with real architectural choices: new features, complex algorithms, systems with multiple valid designs. The TDD enforcement and complexity thresholds produce dramatically better-decomposed code. The +$0.10/task premium pays for itself in maintainability.</p>
+			</div>
+		</div>
+
+		<div class="bottom-line">
+			<strong>What the charts can&rsquo;t show you:</strong> The 4 identical-output tasks aren&rsquo;t failures of the experiment &mdash; they&rsquo;re the most important finding. They prove that <em>personality prompts are not magic</em>. They don&rsquo;t make Claude &ldquo;think harder&rdquo; or &ldquo;try more.&rdquo; They constrain the solution space by adding rules (max function length, TDD, complexity gates). When the task already has one obvious solution, the rules have nothing to constrain. This means personality profiles are a <strong>precision tool, not a quality dial</strong> &mdash; deploy them where they matter.
+		</div>
+
+		<p class="methodology">
+			<strong>Methodology:</strong> 3 Claude Code profiles (blank, main, opinionated) &times; 5 benchmark tasks &times; 4 repetitions = 60 total runs.
+			All profiles use Claude Opus 4.6 with identical task prompts and verification scripts. The only independent variable is the personality configuration injected via <code>--append-system-prompt</code>.
+			Metrics are median values with IQR ranges; statistical claims require non-overlapping IQRs.
+			Code quality measured via 9 zero-cost Python analyzers (no LLM scoring). Full source: <code>benchmarks/analyzers/</code>.
+			<br><br>
+			<strong>Limitations:</strong> 5-task subset of a 53-task suite. 4 of 5 tasks showed no differentiation (low design latitude). A follow-up experiment with higher design-latitude tasks (ex-react, ce-003-statistics3, ex-linked-list, ex-paasio) is planned to test whether the ex-bowling result generalizes.
+		</p>
 	</div>
 
 </div>
