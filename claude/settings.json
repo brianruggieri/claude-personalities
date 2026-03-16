@@ -1,6 +1,21 @@
 {
-	"permissions": {
-		"defaultMode": "default"
-	},
-	"enabledPlugins": {}
+  "permissions": {
+    "defaultMode": "default"
+  },
+  "enabledPlugins": {},
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "TeamCreate",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'TEAM=$(cat | jq -r \".tool_input.team_name // empty\"); if [ -n \"$TEAM\" ] && ! pgrep -f \"teamchat.*$TEAM\" > /dev/null; then teamchat --team \"$TEAM\" & fi'",
+            "async": true,
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
 }
