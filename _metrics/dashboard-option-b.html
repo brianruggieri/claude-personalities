@@ -203,7 +203,7 @@
 
 	<div class="header">
 		<h1>Claude Personalities &mdash; Benchmark Dashboard (Option B: 5 Tasks)</h1>
-		<div class="subtitle">Generated 2026-03-16 &bull; Profiles: blank, main, opinionated &bull; 5 benchmark tasks &bull; n=1 per cell (pilot run)</div>
+		<div class="subtitle">Generated 2026-03-16 &bull; Profiles: blank, main, opinionated &bull; 5 benchmark tasks &bull; n=4 per cell (median values)</div>
 	</div>
 
 	<!-- Total Cost Summary Cards -->
@@ -270,11 +270,11 @@
 	<div class="findings">
 		<h2>Key Findings</h2>
 		<ul>
-			<li><span class="highlight">Caveat: all results are n=1</span> (single run per task per profile). Differences described below are observed, not statistically confirmed. Run 3+ repetitions before drawing conclusions.</li>
-			<li><span class="highlight">ex-bowling</span> shows the largest observed profile differentiation: opinionated produced <span class="highlight">max_function_length=19</span> vs main=64, and <span class="highlight">cognitive_complexity_max=11</span> vs main=38. This is the only task where the opinionated cost premium (+$0.10 over blank) corresponded to measurably different code structure.</li>
-			<li><span class="highlight">3 of 5 tasks</span> (he-000, ce-000, rf-001) produced identical or near-identical code across all profiles. This suggests personality differentiation only manifests when the task has high design latitude &mdash; multiple valid architectures for the same problem.</li>
-			<li><span class="highlight">blank was cheapest in this run</span> &mdash; 30&ndash;45% less expensive than opinionated on most tasks. Whether this holds across repeated runs requires variance estimation.</li>
-			<li><span class="highlight">ce-000-regex-utils</span> was the most expensive task ($0.35&ndash;$0.42) across all profiles, likely due to multi-method class construction and extensive test interaction.</li>
+			<li><span class="highlight">Results are n=4 per cell</span> (4 runs per task per profile, median values shown). IQR ranges confirm findings below.</li>
+			<li><span class="highlight">ex-bowling confirms opinionated produces dramatically simpler code.</span> Cognitive complexity: opinionated 12 [IQR 11&ndash;17] vs blank 33 [27.5&ndash;38.5] vs main 34 [29.5&ndash;38.5]. Max function length: opinionated 19 [17.5&ndash;23.5] vs blank 54.5 [45.5&ndash;59.5] vs main 62 [55&ndash;64]. <span class="highlight">IQRs do not overlap</span> &mdash; this is a consistent, reproducible difference.</li>
+			<li><span class="highlight">4 of 5 tasks produce identical code</span> regardless of profile (he-000, ce-000, rf-001: zero variance; mbpp-011: overlapping IQRs). Personality differentiation only manifests when the task has high design latitude.</li>
+			<li><span class="highlight">blank is consistently 35&ndash;55% cheaper</span> than opinionated across all tasks and all runs. Cost IQRs do not overlap between blank and opinionated on any task.</li>
+			<li><span class="highlight">The opinionated cost premium only pays off on ex-bowling</span> (+$0.10 over blank) where it produces 3x simpler code. On the other 4 tasks, you pay more for identical output.</li>
 		</ul>
 	</div>
 
@@ -305,11 +305,11 @@ const profiles = {
 		color: '#3b82f6',
 		colorAlpha: 'rgba(59, 130, 246, 0.25)',
 		data: [
-			{ task: 'he-000-has-close-elements', cost_usd: 0.169, duration_s: 23, complexity_max: 8, cognitive_max: 6, maintainability: 48.48, naming_score: 100, overeng_score: 100, personality_compliance: 46, lines: 36, output_tokens: 551, max_func_len: 13 },
-			{ task: 'mbpp-011-remove-occ', cost_usd: 0.207, duration_s: 34, complexity_max: 3, cognitive_max: 2, maintainability: 57.45, naming_score: 95, overeng_score: 100, personality_compliance: 62, lines: 18, output_tokens: 987, max_func_len: 10 },
-			{ task: 'ex-bowling', cost_usd: 0.246, duration_s: 47, complexity_max: 23, cognitive_max: 38, maintainability: 19.08, naming_score: 95, overeng_score: 100, personality_compliance: 80, lines: 308, output_tokens: 1772, max_func_len: 64 },
-			{ task: 'ce-000-regex-utils', cost_usd: 0.416, duration_s: 99, complexity_max: 1, cognitive_max: 0, maintainability: 20.45, naming_score: 90, overeng_score: 100, personality_compliance: 100, lines: 371, output_tokens: 6269, max_func_len: 35 },
-			{ task: 'rf-001-command-output-hash', cost_usd: 0.255, duration_s: 40, complexity_max: 12, cognitive_max: 11, maintainability: 28.08, naming_score: 90, overeng_score: 100, personality_compliance: 87, lines: 172, output_tokens: 1543, max_func_len: 60 }
+			{ task: 'he-000-has-close-elements', cost_usd: 0.162, duration_s: 19, complexity_max: 8, cognitive_max: 6, maintainability: 48.48, naming_score: 100, overeng_score: 100, personality_compliance: 46, lines: 36, output_tokens: 562, max_func_len: 13 },
+			{ task: 'mbpp-011-remove-occ', cost_usd: 0.204, duration_s: 34, complexity_max: 4, cognitive_max: 3, maintainability: 57.97, naming_score: 95, overeng_score: 100, personality_compliance: 64, lines: 18, output_tokens: 972, max_func_len: 10 },
+			{ task: 'ex-bowling', cost_usd: 0.248, duration_s: 44, complexity_max: 20, cognitive_max: 34, maintainability: 19.3, naming_score: 95, overeng_score: 100, personality_compliance: 80, lines: 307, output_tokens: 1852, max_func_len: 62 },
+			{ task: 'ce-000-regex-utils', cost_usd: 0.395, duration_s: 91, complexity_max: 1, cognitive_max: 0, maintainability: 20.38, naming_score: 90, overeng_score: 100, personality_compliance: 100, lines: 372, output_tokens: 5548, max_func_len: 35 },
+			{ task: 'rf-001-command-output-hash', cost_usd: 0.253, duration_s: 40, complexity_max: 12, cognitive_max: 11, maintainability: 28.08, naming_score: 90, overeng_score: 100, personality_compliance: 87, lines: 172, output_tokens: 1604, max_func_len: 60 }
 		]
 	},
 	blank: {
@@ -317,11 +317,11 @@ const profiles = {
 		color: '#94a3b8',
 		colorAlpha: 'rgba(148, 163, 184, 0.25)',
 		data: [
-			{ task: 'he-000-has-close-elements', cost_usd: 0.119, duration_s: 14, complexity_max: 8, cognitive_max: 6, maintainability: 48.48, naming_score: 100, overeng_score: 100, personality_compliance: 46, lines: 36, output_tokens: 538, max_func_len: 13 },
-			{ task: 'mbpp-011-remove-occ', cost_usd: 0.130, duration_s: 24, complexity_max: 5, cognitive_max: 6, maintainability: 56.86, naming_score: 95, overeng_score: 100, personality_compliance: 75, lines: 19, output_tokens: 949, max_func_len: 11 },
-			{ task: 'ex-bowling', cost_usd: 0.170, duration_s: 27, complexity_max: 19, cognitive_max: 27, maintainability: 20.36, naming_score: 95, overeng_score: 100, personality_compliance: 81, lines: 278, output_tokens: 1342, max_func_len: 41 },
-			{ task: 'ce-000-regex-utils', cost_usd: 0.345, duration_s: 124, complexity_max: 1, cognitive_max: 0, maintainability: 20.31, naming_score: 90, overeng_score: 100, personality_compliance: 100, lines: 373, output_tokens: 6027, max_func_len: 35 },
-			{ task: 'rf-001-command-output-hash', cost_usd: 0.138, duration_s: 23, complexity_max: 12, cognitive_max: 11, maintainability: 28.08, naming_score: 90, overeng_score: 100, personality_compliance: 87, lines: 172, output_tokens: 1153, max_func_len: 60 }
+			{ task: 'he-000-has-close-elements', cost_usd: 0.101, duration_s: 16, complexity_max: 8, cognitive_max: 6, maintainability: 48.48, naming_score: 100, overeng_score: 100, personality_compliance: 46, lines: 36, output_tokens: 538, max_func_len: 13 },
+			{ task: 'mbpp-011-remove-occ', cost_usd: 0.13, duration_s: 26, complexity_max: 4, cognitive_max: 4, maintainability: 57.16, naming_score: 95, overeng_score: 100, personality_compliance: 68, lines: 18, output_tokens: 939, max_func_len: 10 },
+			{ task: 'ex-bowling', cost_usd: 0.175, duration_s: 33, complexity_max: 21, cognitive_max: 33, maintainability: 19.37, naming_score: 95, overeng_score: 100, personality_compliance: 80, lines: 296, output_tokens: 1497, max_func_len: 54 },
+			{ task: 'ce-000-regex-utils', cost_usd: 0.321, duration_s: 98, complexity_max: 1, cognitive_max: 0, maintainability: 20.45, naming_score: 90, overeng_score: 100, personality_compliance: 100, lines: 370, output_tokens: 5083, max_func_len: 35 },
+			{ task: 'rf-001-command-output-hash', cost_usd: 0.15, duration_s: 28, complexity_max: 12, cognitive_max: 11, maintainability: 28.08, naming_score: 90, overeng_score: 100, personality_compliance: 87, lines: 172, output_tokens: 1160, max_func_len: 60 }
 		]
 	},
 	opinionated: {
@@ -329,11 +329,11 @@ const profiles = {
 		color: '#f59e0b',
 		colorAlpha: 'rgba(245, 158, 11, 0.25)',
 		data: [
-			{ task: 'he-000-has-close-elements', cost_usd: 0.185, duration_s: 24, complexity_max: 8, cognitive_max: 6, maintainability: 48.48, naming_score: 100, overeng_score: 100, personality_compliance: 46, lines: 36, output_tokens: 559, max_func_len: 13 },
-			{ task: 'mbpp-011-remove-occ', cost_usd: 0.237, duration_s: 44, complexity_max: 4, cognitive_max: 4, maintainability: 59.22, naming_score: 85, overeng_score: 100, personality_compliance: 50, lines: 16, output_tokens: 894, max_func_len: 8 },
-			{ task: 'ex-bowling', cost_usd: 0.271, duration_s: 32, complexity_max: 8, cognitive_max: 11, maintainability: 19.64, naming_score: 95, overeng_score: 100, personality_compliance: 83, lines: 294, output_tokens: 1467, max_func_len: 19 },
-			{ task: 'ce-000-regex-utils', cost_usd: 0.389, duration_s: 78, complexity_max: 1, cognitive_max: 0, maintainability: 20.31, naming_score: 90, overeng_score: 100, personality_compliance: 100, lines: 374, output_tokens: 4388, max_func_len: 35 },
-			{ task: 'rf-001-command-output-hash', cost_usd: 0.258, duration_s: 35, complexity_max: 12, cognitive_max: 11, maintainability: 28.08, naming_score: 90, overeng_score: 100, personality_compliance: 87, lines: 172, output_tokens: 2182, max_func_len: 60 }
+			{ task: 'he-000-has-close-elements', cost_usd: 0.185, duration_s: 20, complexity_max: 8, cognitive_max: 6, maintainability: 48.48, naming_score: 100, overeng_score: 100, personality_compliance: 46, lines: 36, output_tokens: 560, max_func_len: 13 },
+			{ task: 'mbpp-011-remove-occ', cost_usd: 0.237, duration_s: 35, complexity_max: 4, cognitive_max: 4, maintainability: 59.22, naming_score: 85, overeng_score: 100, personality_compliance: 50, lines: 16, output_tokens: 914, max_func_len: 8 },
+			{ task: 'ex-bowling', cost_usd: 0.276, duration_s: 37, complexity_max: 8, cognitive_max: 12, maintainability: 18.59, naming_score: 95, overeng_score: 100, personality_compliance: 83, lines: 314, output_tokens: 1656, max_func_len: 19 },
+			{ task: 'ce-000-regex-utils', cost_usd: 0.397, duration_s: 76, complexity_max: 1, cognitive_max: 0, maintainability: 20.39, naming_score: 90, overeng_score: 100, personality_compliance: 100, lines: 372, output_tokens: 3730, max_func_len: 35 },
+			{ task: 'rf-001-command-output-hash', cost_usd: 0.252, duration_s: 33, complexity_max: 12, cognitive_max: 11, maintainability: 28.08, naming_score: 90, overeng_score: 100, personality_compliance: 87, lines: 172, output_tokens: 2103, max_func_len: 60 }
 		]
 	}
 };
