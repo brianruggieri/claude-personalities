@@ -149,6 +149,55 @@ with tempfile.TemporaryDirectory() as tmpdir:
 	metrics = parse_metrics(result.stdout.strip().split('\n'))
 check('outputs OVERENGINEERING_SCORE', 'OVERENGINEERING_SCORE' in metrics)
 
+# --- function_count.py ---
+print("\n=== function_count.py ===")
+metrics = parse_metrics(run_analyzer('function_count.py', SAMPLE_CODE))
+check('outputs FUNCTION_COUNT', 'FUNCTION_COUNT' in metrics)
+check('outputs FUNCTION_COUNT_AVG_PER_FILE', 'FUNCTION_COUNT_AVG_PER_FILE' in metrics)
+check('counts 7 functions in sample', metrics.get('FUNCTION_COUNT') == 7,
+      f"got {metrics.get('FUNCTION_COUNT')}")
+check('avg is 7.0 (one file)', metrics.get('FUNCTION_COUNT_AVG_PER_FILE') == 7.0,
+      f"got {metrics.get('FUNCTION_COUNT_AVG_PER_FILE')}")
+
+# --- type_annotation_coverage.py ---
+print("\n=== type_annotation_coverage.py ===")
+metrics = parse_metrics(run_analyzer('type_annotation_coverage.py', SAMPLE_CODE))
+check('outputs TYPE_ANNOTATION_COVERAGE', 'TYPE_ANNOTATION_COVERAGE' in metrics)
+check('outputs TYPE_ANNOTATIONS_MISSING', 'TYPE_ANNOTATIONS_MISSING' in metrics)
+check('coverage is 0 (no annotations in sample)', metrics.get('TYPE_ANNOTATION_COVERAGE') == 0,
+      f"got {metrics.get('TYPE_ANNOTATION_COVERAGE')}")
+check('missing count > 0', metrics.get('TYPE_ANNOTATIONS_MISSING', 0) > 0,
+      f"got {metrics.get('TYPE_ANNOTATIONS_MISSING')}")
+
+# --- docstring_coverage.py ---
+print("\n=== docstring_coverage.py ===")
+metrics = parse_metrics(run_analyzer('docstring_coverage.py', SAMPLE_CODE))
+check('outputs DOCSTRING_COVERAGE', 'DOCSTRING_COVERAGE' in metrics)
+check('outputs DOCSTRINGS_MISSING', 'DOCSTRINGS_MISSING' in metrics)
+# SAMPLE_CODE: class BowlingGame has docstring, __init__ no, roll yes, score yes,
+# _is_strike no, _is_spare no, _strike_bonus no, _spare_bonus no = 3/8 = 38%
+check('coverage is 38 (3 of 8 have docstrings)', metrics.get('DOCSTRING_COVERAGE') == 38,
+      f"got {metrics.get('DOCSTRING_COVERAGE')}")
+check('missing is 5', metrics.get('DOCSTRINGS_MISSING') == 5,
+      f"got {metrics.get('DOCSTRINGS_MISSING')}")
+
+# --- error_handling_density.py ---
+print("\n=== error_handling_density.py ===")
+metrics = parse_metrics(run_analyzer('error_handling_density.py', SAMPLE_CODE))
+check('outputs ERROR_HANDLING_TRY_COUNT', 'ERROR_HANDLING_TRY_COUNT' in metrics)
+check('outputs ERROR_HANDLING_RAISE_COUNT', 'ERROR_HANDLING_RAISE_COUNT' in metrics)
+check('outputs ERROR_HANDLING_GUARD_CLAUSES', 'ERROR_HANDLING_GUARD_CLAUSES' in metrics)
+check('outputs ERROR_HANDLING_DENSITY', 'ERROR_HANDLING_DENSITY' in metrics)
+# SAMPLE_CODE: 0 try blocks, 1 raise (in roll), 1 guard clause (if not isinstance... raise)
+check('try count is 0', metrics.get('ERROR_HANDLING_TRY_COUNT') == 0,
+      f"got {metrics.get('ERROR_HANDLING_TRY_COUNT')}")
+check('raise count is 1', metrics.get('ERROR_HANDLING_RAISE_COUNT') == 1,
+      f"got {metrics.get('ERROR_HANDLING_RAISE_COUNT')}")
+check('guard clauses is 1', metrics.get('ERROR_HANDLING_GUARD_CLAUSES') == 1,
+      f"got {metrics.get('ERROR_HANDLING_GUARD_CLAUSES')}")
+check('density > 0', metrics.get('ERROR_HANDLING_DENSITY', 0) > 0,
+      f"got {metrics.get('ERROR_HANDLING_DENSITY')}")
+
 # --- Summary ---
 print(f"\n{'='*40}")
 print(f"Results: {PASS_COUNT} passed, {FAIL_COUNT} failed")
