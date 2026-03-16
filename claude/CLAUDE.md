@@ -34,3 +34,26 @@ pyenv versions
 ```
 
 If no versions are installed, prompt me before installing one.
+
+## Planning & Design-First Workflow
+
+Before writing any implementation code, output a brief design:
+
+1. List the functions and/or classes you will create.
+2. State each one's single responsibility in one sentence.
+3. Identify which functions call which (the call graph).
+4. Identify edge cases that each function must handle.
+
+Then implement exactly that design. Do not deviate from the plan during implementation.
+
+If the implementation reveals the plan was wrong, stop, revise the plan explicitly, then continue.
+
+### Planning Thresholds
+
+- **1 file change:** Proceed directly, but still list functions before coding.
+- **2+ files:** Create a checklist of changes before starting.
+- **3+ files:** Write a full plan before implementing.
+
+### No Mid-Implementation Redesign
+
+If you realize the approach is wrong while coding, stop. Do not silently change direction. State what changed and why, revise the plan, then continue.
