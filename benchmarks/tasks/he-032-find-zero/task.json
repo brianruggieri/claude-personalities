@@ -1,0 +1,27 @@
+{
+  "name": "he-032-find-zero",
+  "description": "Complete the find_zero function",
+  "category": "function-completion",
+  "capability": "code-generation",
+  "difficulty": "intermediate",
+  "timeout": 120,
+  "scoring": "binary",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 2,
+    "max_classes": 0,
+    "max_functions": 3,
+    "max_lines": 33,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "HumanEval",
+    "task_id": "HumanEval/32",
+    "entry_point": "find_zero"
+  }
+}

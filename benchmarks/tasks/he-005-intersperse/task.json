@@ -1,0 +1,27 @@
+{
+  "name": "he-005-intersperse",
+  "description": "Complete the intersperse function",
+  "category": "function-completion",
+  "capability": "code-generation",
+  "difficulty": "basic",
+  "timeout": 120,
+  "scoring": "binary",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 2,
+    "max_classes": 0,
+    "max_functions": 3,
+    "max_lines": 30,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "HumanEval",
+    "task_id": "HumanEval/5",
+    "entry_point": "intersperse"
+  }
+}

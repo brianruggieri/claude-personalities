@@ -1,0 +1,27 @@
+{
+  "name": "he-001-separate-paren-groups",
+  "description": "Complete the separate_paren_groups function",
+  "category": "function-completion",
+  "capability": "code-generation",
+  "difficulty": "intermediate",
+  "timeout": 120,
+  "scoring": "binary",
+  "metrics": [
+    "correctness",
+    "cost",
+    "duration",
+    "token_efficiency"
+  ],
+  "expected_complexity": {
+    "max_files": 2,
+    "max_classes": 0,
+    "max_functions": 3,
+    "max_lines": 42,
+    "disallow_patterns": []
+  },
+  "source": {
+    "dataset": "HumanEval",
+    "task_id": "HumanEval/1",
+    "entry_point": "separate_paren_groups"
+  }
+}
