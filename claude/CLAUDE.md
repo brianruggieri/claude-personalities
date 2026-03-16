@@ -34,3 +34,13 @@ pyenv versions
 ```
 
 If no versions are installed, prompt me before installing one.
+
+## Testing Discipline
+
+- Every change that touches logic gets a test. No exceptions.
+- New behavior: write a failing test first, then implement, then refactor (red-green-refactor).
+- Bug fixes: write a regression test that reproduces the bug before writing the fix.
+- Test behavior, not implementation. Tests should survive refactoring.
+- Mock boundaries (network, filesystem, databases), not internal logic.
+- Verify tests actually catch failures: break the code and confirm the test fails.
+- After any code change: run the test suite before reporting done.
