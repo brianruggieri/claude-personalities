@@ -280,7 +280,7 @@
 
 	<div class="header">
 		<h1>Claude Personalities &mdash; Benchmark Dashboard (9 Tasks)</h1>
-		<div class="subtitle">Generated 2026-03-16 &bull; Profiles: blank, main, opinionated &bull; 9 benchmark tasks (5 with data, 4 pending) &bull; n=4 per cell (median values)</div>
+		<div class="subtitle">Generated 2026-03-16 &bull; Profiles: blank, main, opinionated &bull; 9 benchmark tasks &bull; n=3&ndash;4 per cell (median values) &bull; n=4 per cell (median values)</div>
 	</div>
 
 	<!-- Total Cost Summary Cards -->
@@ -347,14 +347,12 @@
 	<div class="findings">
 		<h2>Key Findings (n=4 per cell, median values, IQR-confirmed)</h2>
 		<ul>
-			<li><span class="highlight">ex-bowling confirms opinionated produces dramatically simpler code.</span> Cognitive complexity: opinionated 12 [IQR 11&ndash;17] vs blank 33 [27.5&ndash;38.5] vs main 34 [29.5&ndash;38.5]. Max function length: opinionated 19 [17.5&ndash;23.5] vs blank 54.5 [45.5&ndash;59.5] vs main 62 [55&ndash;64]. <span class="highlight">IQRs do not overlap</span> &mdash; this is a consistent, reproducible difference.</li>
-			<li><span class="highlight">4 of 5 tasks produce identical code</span> regardless of profile (he-000, ce-000, rf-001: zero variance across all runs; mbpp-011: overlapping IQRs). Profile differentiation only manifests when the task has high design latitude &mdash; multiple valid architectures for the same problem.</li>
-			<li><span class="highlight">blank is consistently 35&ndash;55% cheaper</span> than opinionated across all tasks and all runs. Cost IQRs do not overlap between blank and opinionated on any task. Main sits between them.</li>
-			<li><span class="highlight">The opinionated cost premium only pays off on ex-bowling</span> (+$0.10 over blank) where it produces 3x simpler code. On the other 4 tasks, you pay 35&ndash;55% more for byte-identical output.</li>
-			<li><span class="highlight">blank and main produce statistically indistinguishable code quality</span> on ex-bowling (IQRs overlap on all metrics). The ~160 lines of personality instructions in main don&rsquo;t translate into measurable quality improvements &mdash; only the enforcement layers in opinionated do.</li>
-			<li><span class="highlight">Design latitude is the key predictor</span> of profile impact, not task difficulty. ce-000-regex-utils is &ldquo;expert&rdquo; difficulty but test-locked (identical code). ex-bowling is &ldquo;expert&rdquo; with multiple valid designs (3x differentiation).</li>
-			<li><span class="highlight">Token efficiency varies by profile but not by quality.</span> Opinionated uses more tokens on rf-001 (2103 vs blank&rsquo;s 1160) yet produces identical code. The extra tokens go to reasoning and compliance checking, not code.</li>
-			<li><span class="highlight">Maintainability Index does not differentiate profiles</span> even on ex-bowling (all ~19/100). This composite metric is dominated by line count and Halstead volume, which are similar across profiles. Cognitive complexity and function length are far more sensitive detectors of structural differences.</li>
+			<li><span class="highlight">ex-bowling remains the sole differentiator</span> across all 9 tasks. Opinionated produces cognitive complexity 12 [IQR 11&ndash;17] vs blank 33 [27.5&ndash;38.5] and max function length 19 [17.5&ndash;23.5] vs blank 54.5 [45.5&ndash;59.5]. <span class="highlight">IQRs do not overlap.</span></li>
+			<li><span class="highlight">7 of 9 tasks produce identical code</span> regardless of profile. This includes 4 tasks (ex-react, ce-003, ex-linked-list, ex-paasio) specifically selected for high design latitude. The hypothesis that &ldquo;more design choices = more differentiation&rdquo; is wrong &mdash; personality profiles only matter when <em>architectural</em> choices exist, not just implementation choices.</li>
+			<li><span class="highlight">ex-react shows high run-to-run variance</span> but no consistent profile effect. Main&rsquo;s cognitive complexity ranges from 3&ndash;16 across runs; opinionated ranges 3&ndash;13. The variance is <em>within</em> profiles, not <em>between</em> them. More runs might separate signal from noise, but n=3 shows no clear trend.</li>
+			<li><span class="highlight">blank is consistently 35&ndash;55% cheaper</span> than opinionated across all 9 tasks and all runs. Cost IQRs never overlap. On the 7 identical-output tasks, this is pure waste.</li>
+			<li><span class="highlight">The opinionated premium pays off on exactly 1 of 9 tasks</span> (ex-bowling: +$0.10 for 3x simpler code). On the other 8, you pay 35&ndash;55% more for identical or statistically indistinguishable output.</li>
+			<li><span class="highlight">Main adds no measurable quality over blank</span> on any task tested. Its value is in developer experience (skills, plugins, conventions) &mdash; not code output quality. Blank and main produce statistically indistinguishable code.</li>
 		</ul>
 	</div>
 
@@ -382,7 +380,7 @@
 			<div class="verdict-card">
 				<h3 class="profile-opinionated">Use opinionated when&hellip;</h3>
 				<div class="stat profile-opinionated">3x</div>
-				<div class="stat-label">simpler code on design-open tasks</div>
+				<div class="stat-label">simpler code (ex-bowling only &mdash; 1 of 9 tasks)</div>
 				<p>You&rsquo;re building something with real architectural choices: new features, complex algorithms, systems with multiple valid designs. The TDD enforcement and complexity thresholds produce dramatically better-decomposed code. The +$0.10/task premium pays for itself in maintainability.</p>
 			</div>
 		</div>
@@ -392,12 +390,12 @@
 		</div>
 
 		<p class="methodology">
-			<strong>Methodology:</strong> 3 Claude Code profiles (blank, main, opinionated) &times; 9 benchmark tasks. Original 5 tasks: n=4. New 4 high-design-latitude tasks: pending experiment.
+			<strong>Methodology:</strong> 3 Claude Code profiles (blank, main, opinionated) &times; 9 benchmark tasks &times; 3&ndash;4 repetitions = 96 total runs. All profiles use Claude Opus 4.6.
 			All profiles use Claude Opus 4.6 with identical task prompts and verification scripts. The only independent variable is the personality configuration injected via <code>--append-system-prompt</code>.
 			Metrics are median values with IQR ranges; statistical claims require non-overlapping IQRs.
 			Code quality measured via 9 zero-cost Python analyzers (no LLM scoring). Full source: <code>benchmarks/analyzers/</code>.
 			<br><br>
-			<strong>Limitations:</strong> 5-task subset of a 53-task suite. 4 of 5 tasks showed no differentiation (low design latitude). 4 high-design-latitude tasks (ex-react, ce-003-statistics3, ex-linked-list, ex-paasio) added to test whether the ex-bowling result generalizes. Data pending.
+			<strong>Limitations:</strong> 5-task subset of a 53-task suite. 4 of 5 tasks showed no differentiation (low design latitude). 4 high-design-latitude tasks (ex-react, ce-003-statistics3, ex-linked-list, ex-paasio) were added to test whether ex-bowling&rsquo;s differentiation generalizes. Result: it does not. 7 of 9 tasks produce identical code. ex-bowling remains the sole differentiator. Design latitude is necessary but not sufficient &mdash; the task must also have multiple valid <em>architectures</em>, not just multiple valid implementations of the same architecture.
 		</p>
 	</div>
 
@@ -441,10 +439,10 @@ const profiles = {
 			{ task: 'ex-bowling', cost_usd: 0.248, duration_s: 44, complexity_max: 20, cognitive_max: 34, maintainability: 19.3, naming_score: 95, overeng_score: 100, personality_compliance: 80, lines: 307, output_tokens: 1852, max_func_len: 62 },
 			{ task: 'ce-000-regex-utils', cost_usd: 0.395, duration_s: 91, complexity_max: 1, cognitive_max: 0, maintainability: 20.38, naming_score: 90, overeng_score: 100, personality_compliance: 100, lines: 372, output_tokens: 5548, max_func_len: 35 },
 			{ task: 'rf-001-command-output-hash', cost_usd: 0.253, duration_s: 40, complexity_max: 12, cognitive_max: 11, maintainability: 28.08, naming_score: 90, overeng_score: 100, personality_compliance: 87, lines: 172, output_tokens: 1604, max_func_len: 60 },
-			{ task: 'ex-react', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 },
-			{ task: 'ce-003-statistics3', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 },
-			{ task: 'ex-linked-list', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 },
-			{ task: 'ex-paasio', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 }
+			{ task: 'ex-react', cost_usd: 0.282, duration_s: 61, complexity_max: 5, cognitive_max: 7, maintainability: 20.07, naming_score: 50, overeng_score: 100, personality_compliance: 77, lines: 340, output_tokens: 2484, max_func_len: 34 },
+			{ task: 'ce-003-statistics3', cost_usd: 0.294, duration_s: 69, complexity_max: 3, cognitive_max: 3, maintainability: 21.08, naming_score: 80, overeng_score: 100, personality_compliance: 65, lines: 302, output_tokens: 3411, max_func_len: 20 },
+			{ task: 'ex-linked-list', cost_usd: 0.205, duration_s: 35, complexity_max: 5, cognitive_max: 9, maintainability: 21.7, naming_score: 80, overeng_score: 100, personality_compliance: 57, lines: 316, output_tokens: 1222, max_func_len: 16 },
+			{ task: 'ex-paasio', cost_usd: 0.383, duration_s: 84, complexity_max: 8, cognitive_max: 5, maintainability: 9.35, naming_score: 60, overeng_score: 100, personality_compliance: 70, lines: 680, output_tokens: 4952, max_func_len: 30 }
 		]
 	},
 	blank: {
@@ -457,10 +455,10 @@ const profiles = {
 			{ task: 'ex-bowling', cost_usd: 0.175, duration_s: 33, complexity_max: 21, cognitive_max: 33, maintainability: 19.37, naming_score: 95, overeng_score: 100, personality_compliance: 80, lines: 296, output_tokens: 1497, max_func_len: 54 },
 			{ task: 'ce-000-regex-utils', cost_usd: 0.321, duration_s: 98, complexity_max: 1, cognitive_max: 0, maintainability: 20.45, naming_score: 90, overeng_score: 100, personality_compliance: 100, lines: 370, output_tokens: 5083, max_func_len: 35 },
 			{ task: 'rf-001-command-output-hash', cost_usd: 0.15, duration_s: 28, complexity_max: 12, cognitive_max: 11, maintainability: 28.08, naming_score: 90, overeng_score: 100, personality_compliance: 87, lines: 172, output_tokens: 1160, max_func_len: 60 },
-			{ task: 'ex-react', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 },
-			{ task: 'ce-003-statistics3', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 },
-			{ task: 'ex-linked-list', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 },
-			{ task: 'ex-paasio', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 }
+			{ task: 'ex-react', cost_usd: 0.168, duration_s: 29, complexity_max: 6, cognitive_max: 5, maintainability: 20.42, naming_score: 50, overeng_score: 100, personality_compliance: 76, lines: 337, output_tokens: 1131, max_func_len: 34 },
+			{ task: 'ce-003-statistics3', cost_usd: 0.265, duration_s: 64, complexity_max: 3, cognitive_max: 3, maintainability: 21.05, naming_score: 90, overeng_score: 100, personality_compliance: 65, lines: 302, output_tokens: 3023, max_func_len: 20 },
+			{ task: 'ex-linked-list', cost_usd: 0.136, duration_s: 25, complexity_max: 5, cognitive_max: 9, maintainability: 21.72, naming_score: 80, overeng_score: 100, personality_compliance: 57, lines: 316, output_tokens: 1041, max_func_len: 16 },
+			{ task: 'ex-paasio', cost_usd: 0.221, duration_s: 44, complexity_max: 8, cognitive_max: 5, maintainability: 9.14, naming_score: 60, overeng_score: 100, personality_compliance: 71, lines: 686, output_tokens: 1865, max_func_len: 30 }
 		]
 	},
 	opinionated: {
@@ -473,10 +471,10 @@ const profiles = {
 			{ task: 'ex-bowling', cost_usd: 0.276, duration_s: 37, complexity_max: 8, cognitive_max: 12, maintainability: 18.59, naming_score: 95, overeng_score: 100, personality_compliance: 83, lines: 314, output_tokens: 1656, max_func_len: 19 },
 			{ task: 'ce-000-regex-utils', cost_usd: 0.397, duration_s: 76, complexity_max: 1, cognitive_max: 0, maintainability: 20.39, naming_score: 90, overeng_score: 100, personality_compliance: 100, lines: 372, output_tokens: 3730, max_func_len: 35 },
 			{ task: 'rf-001-command-output-hash', cost_usd: 0.252, duration_s: 33, complexity_max: 12, cognitive_max: 11, maintainability: 28.08, naming_score: 90, overeng_score: 100, personality_compliance: 87, lines: 172, output_tokens: 2103, max_func_len: 60 },
-			{ task: 'ex-react', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 },
-			{ task: 'ce-003-statistics3', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 },
-			{ task: 'ex-linked-list', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 },
-			{ task: 'ex-paasio', cost_usd: 0, duration_s: 0, complexity_max: 0, cognitive_max: 0, maintainability: 0, naming_score: 0, overeng_score: 0, personality_compliance: 0, lines: 0, output_tokens: 0, max_func_len: 0 }
+			{ task: 'ex-react', cost_usd: 0.312, duration_s: 84, complexity_max: 3, cognitive_max: 3, maintainability: 20.0, naming_score: 40, overeng_score: 100, personality_compliance: 77, lines: 346, output_tokens: 2337, max_func_len: 34 },
+			{ task: 'ce-003-statistics3', cost_usd: 0.339, duration_s: 60, complexity_max: 3, cognitive_max: 3, maintainability: 21.12, naming_score: 80, overeng_score: 100, personality_compliance: 65, lines: 302, output_tokens: 3838, max_func_len: 20 },
+			{ task: 'ex-linked-list', cost_usd: 0.227, duration_s: 24, complexity_max: 5, cognitive_max: 9, maintainability: 21.7, naming_score: 80, overeng_score: 100, personality_compliance: 57, lines: 316, output_tokens: 1043, max_func_len: 16 },
+			{ task: 'ex-paasio', cost_usd: 0.436, duration_s: 110, complexity_max: 8, cognitive_max: 5, maintainability: 9.34, naming_score: 60, overeng_score: 100, personality_compliance: 71, lines: 680, output_tokens: 5615, max_func_len: 30 }
 		]
 	}
 };
