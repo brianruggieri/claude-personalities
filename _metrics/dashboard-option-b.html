@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Personalities — Benchmark Dashboard (Option B)</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+	*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+	body {
+		background: #0f172a;
+		color: #e2e8f0;
+		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+		line-height: 1.6;
+		padding: 2rem;
+	}
+
+	.header {
+		text-align: center;
+		margin-bottom: 2.5rem;
+		padding-bottom: 1.5rem;
+		border-bottom: 1px solid #334155;
+	}
+	.header h1 {
+		font-size: 1.75rem;
+		font-weight: 700;
+		color: #f1f5f9;
+		margin-bottom: 0.25rem;
+	}
+	.header .subtitle {
+		font-size: 0.875rem;
+		color: #94a3b8;
+	}
+
+	.dashboard {
+		max-width: 1400px;
+		margin: 0 auto;
+	}
+
+	/* Summary cards */
+	.summary-row {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+		gap: 1.25rem;
+		margin-bottom: 2rem;
+	}
+	.summary-card {
+		background: #1e293b;
+		border-radius: 12px;
+		padding: 1.5rem;
+		text-align: center;
+		border: 1px solid #334155;
+		transition: transform 0.15s;
+	}
+	.summary-card:hover { transform: translateY(-2px); }
+	.summary-card .profile-label {
+		font-size: 0.8rem;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		font-weight: 600;
+		margin-bottom: 0.5rem;
+	}
+	.summary-card .cost-value {
+		font-size: 2.25rem;
+		font-weight: 700;
+	}
+	.summary-card .cost-detail {
+		font-size: 0.8rem;
+		color: #94a3b8;
+		margin-top: 0.25rem;
+	}
+	.profile-main { color: #3b82f6; }
+	.profile-blank { color: #94a3b8; }
+	.profile-opinionated { color: #f59e0b; }
+	.dot-main { background: #3b82f6; }
+	.dot-blank { background: #94a3b8; }
+	.dot-opinionated { background: #f59e0b; }
+
+	/* Chart cards */
+	.chart-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(580px, 1fr));
+		gap: 1.5rem;
+		margin-bottom: 2rem;
+	}
+	.chart-card {
+		background: #1e293b;
+		border-radius: 12px;
+		padding: 1.5rem;
+		border: 1px solid #334155;
+	}
+	.chart-card h2 {
+		font-size: 1rem;
+		font-weight: 600;
+		margin-bottom: 1rem;
+		color: #f1f5f9;
+	}
+	.chart-container {
+		position: relative;
+		width: 100%;
+	}
+	.chart-container canvas {
+		width: 100% !important;
+	}
+
+	.chart-card.full-width {
+		grid-column: 1 / -1;
+	}
+
+	/* Heatmap table */
+	.heatmap-table {
+		width: 100%;
+		border-collapse: separate;
+		border-spacing: 4px;
+		margin-top: 0.5rem;
+	}
+	.heatmap-table th {
+		font-size: 0.75rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: #94a3b8;
+		padding: 0.5rem 1rem;
+		text-align: center;
+	}
+	.heatmap-table th:first-child {
+		text-align: left;
+	}
+	.heatmap-table td {
+		padding: 0.75rem 1rem;
+		border-radius: 6px;
+		text-align: center;
+		font-weight: 600;
+		font-size: 1rem;
+	}
+	.heatmap-table td:first-child {
+		text-align: left;
+		font-weight: 500;
+		font-size: 0.85rem;
+		color: #cbd5e1;
+		background: transparent !important;
+	}
+
+	/* Findings */
+	.findings {
+		background: #1e293b;
+		border-radius: 12px;
+		padding: 2rem;
+		border: 1px solid #334155;
+		margin-top: 1.5rem;
+	}
+	.findings h2 {
+		font-size: 1.15rem;
+		font-weight: 700;
+		margin-bottom: 1rem;
+		color: #f1f5f9;
+	}
+	.findings ul {
+		list-style: none;
+		padding: 0;
+	}
+	.findings li {
+		padding: 0.6rem 0;
+		padding-left: 1.5rem;
+		position: relative;
+		font-size: 0.9rem;
+		color: #cbd5e1;
+		border-bottom: 1px solid #1a2332;
+	}
+	.findings li:last-child { border-bottom: none; }
+	.findings li::before {
+		content: '';
+		position: absolute;
+		left: 0;
+		top: 1rem;
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: #3b82f6;
+	}
+	.findings li:nth-child(2)::before { background: #22c55e; }
+	.findings li:nth-child(3)::before { background: #94a3b8; }
+	.findings li:nth-child(4)::before { background: #ef4444; }
+	.findings li:nth-child(5)::before { background: #f59e0b; }
+	.findings .highlight {
+		color: #f1f5f9;
+		font-weight: 600;
+	}
+
+	/* Responsive */
+	@media (max-width: 640px) {
+		body { padding: 1rem; }
+		.chart-grid { grid-template-columns: 1fr; }
+		.summary-row { grid-template-columns: 1fr; }
+		.header h1 { font-size: 1.25rem; }
+	}
+</style>
+</head>
+<body>
+
+<div class="dashboard">
+
+	<div class="header">
+		<h1>Claude Personalities &mdash; Benchmark Dashboard (Option B: 5 Tasks)</h1>
+		<div class="subtitle">Generated 2026-03-16 &bull; Profiles: blank, main, opinionated &bull; 5 benchmark tasks &bull; n=1 per cell (pilot run)</div>
+	</div>
+
+	<!-- Total Cost Summary Cards -->
+	<div class="summary-row" id="summaryCards"></div>
+
+	<!-- Charts -->
+	<div class="chart-grid">
+
+		<div class="chart-card">
+			<h2>Cost per Task (USD)</h2>
+			<div class="chart-container">
+				<canvas id="chartCost"></canvas>
+			</div>
+		</div>
+
+		<div class="chart-card">
+			<h2>Duration per Task (seconds)</h2>
+			<div class="chart-container">
+				<canvas id="chartDuration"></canvas>
+			</div>
+		</div>
+
+		<div class="chart-card">
+			<h2>Code Quality Radar — ex-bowling (3 differentiating axes only)</h2>
+			<div class="chart-container">
+				<canvas id="chartRadar"></canvas>
+			</div>
+		</div>
+
+		<div class="chart-card">
+			<h2>Max Function Length per Task (lines)</h2>
+			<div class="chart-container">
+				<canvas id="chartFuncLen"></canvas>
+			</div>
+		</div>
+
+		<div class="chart-card">
+			<h2>Token Efficiency (output tokens / lines generated)</h2>
+			<div class="chart-container">
+				<canvas id="chartTokenEff"></canvas>
+			</div>
+		</div>
+
+		<div class="chart-card full-width">
+			<h2>Cost vs. Cognitive Complexity (lower is better on both axes)</h2>
+			<div class="chart-container">
+				<canvas id="chartPareto"></canvas>
+			</div>
+		</div>
+
+		<div class="chart-card full-width">
+			<h2>Marginal Cost of Opinionated vs. Blank</h2>
+			<table class="heatmap-table" id="marginalTable"></table>
+		</div>
+
+		<div class="chart-card full-width">
+			<h2>Complexity Heatmap (complexity_max)</h2>
+			<table class="heatmap-table" id="heatmapTable"></table>
+		</div>
+
+	</div>
+
+	<!-- Key Findings -->
+	<div class="findings">
+		<h2>Key Findings</h2>
+		<ul>
+			<li><span class="highlight">Caveat: all results are n=1</span> (single run per task per profile). Differences described below are observed, not statistically confirmed. Run 3+ repetitions before drawing conclusions.</li>
+			<li><span class="highlight">ex-bowling</span> shows the largest observed profile differentiation: opinionated produced <span class="highlight">max_function_length=19</span> vs main=64, and <span class="highlight">cognitive_complexity_max=11</span> vs main=38. This is the only task where the opinionated cost premium (+$0.10 over blank) corresponded to measurably different code structure.</li>
+			<li><span class="highlight">3 of 5 tasks</span> (he-000, ce-000, rf-001) produced identical or near-identical code across all profiles. This suggests personality differentiation only manifests when the task has high design latitude &mdash; multiple valid architectures for the same problem.</li>
+			<li><span class="highlight">blank was cheapest in this run</span> &mdash; 30&ndash;45% less expensive than opinionated on most tasks. Whether this holds across repeated runs requires variance estimation.</li>
+			<li><span class="highlight">ce-000-regex-utils</span> was the most expensive task ($0.35&ndash;$0.42) across all profiles, likely due to multi-method class construction and extensive test interaction.</li>
+		</ul>
+	</div>
+
+</div>
+
+<script>
+// ─── DATA ─────────────────────────────────────────────────────────────────────
+
+const TASKS = [
+	'he-000-has-close-elements',
+	'mbpp-011-remove-occ',
+	'ex-bowling',
+	'ce-000-regex-utils',
+	'rf-001-command-output-hash'
+];
+
+const TASK_LABELS = [
+	['he-000', 'has-close-elements'],
+	['mbpp-011', 'remove-occ'],
+	'ex-bowling',
+	['ce-000', 'regex-utils'],
+	['rf-001', 'cmd-output-hash']
+];
+
+const profiles = {
+	main: {
+		label: 'main',
+		color: '#3b82f6',
+		colorAlpha: 'rgba(59, 130, 246, 0.25)',
+		data: [
+			{ task: 'he-000-has-close-elements', cost_usd: 0.169, duration_s: 23, complexity_max: 8, cognitive_max: 6, maintainability: 48.48, naming_score: 100, overeng_score: 100, personality_compliance: 46, lines: 36, output_tokens: 551, max_func_len: 13 },
+			{ task: 'mbpp-011-remove-occ', cost_usd: 0.207, duration_s: 34, complexity_max: 3, cognitive_max: 2, maintainability: 57.45, naming_score: 95, overeng_score: 100, personality_compliance: 62, lines: 18, output_tokens: 987, max_func_len: 10 },
+			{ task: 'ex-bowling', cost_usd: 0.246, duration_s: 47, complexity_max: 23, cognitive_max: 38, maintainability: 19.08, naming_score: 95, overeng_score: 100, personality_compliance: 80, lines: 308, output_tokens: 1772, max_func_len: 64 },
+			{ task: 'ce-000-regex-utils', cost_usd: 0.416, duration_s: 99, complexity_max: 1, cognitive_max: 0, maintainability: 20.45, naming_score: 90, overeng_score: 100, personality_compliance: 100, lines: 371, output_tokens: 6269, max_func_len: 35 },
+			{ task: 'rf-001-command-output-hash', cost_usd: 0.255, duration_s: 40, complexity_max: 12, cognitive_max: 11, maintainability: 28.08, naming_score: 90, overeng_score: 100, personality_compliance: 87, lines: 172, output_tokens: 1543, max_func_len: 60 }
+		]
+	},
+	blank: {
+		label: 'blank',
+		color: '#94a3b8',
+		colorAlpha: 'rgba(148, 163, 184, 0.25)',
+		data: [
+			{ task: 'he-000-has-close-elements', cost_usd: 0.119, duration_s: 14, complexity_max: 8, cognitive_max: 6, maintainability: 48.48, naming_score: 100, overeng_score: 100, personality_compliance: 46, lines: 36, output_tokens: 538, max_func_len: 13 },
+			{ task: 'mbpp-011-remove-occ', cost_usd: 0.130, duration_s: 24, complexity_max: 5, cognitive_max: 6, maintainability: 56.86, naming_score: 95, overeng_score: 100, personality_compliance: 75, lines: 19, output_tokens: 949, max_func_len: 11 },
+			{ task: 'ex-bowling', cost_usd: 0.170, duration_s: 27, complexity_max: 19, cognitive_max: 27, maintainability: 20.36, naming_score: 95, overeng_score: 100, personality_compliance: 81, lines: 278, output_tokens: 1342, max_func_len: 41 },
+			{ task: 'ce-000-regex-utils', cost_usd: 0.345, duration_s: 124, complexity_max: 1, cognitive_max: 0, maintainability: 20.31, naming_score: 90, overeng_score: 100, personality_compliance: 100, lines: 373, output_tokens: 6027, max_func_len: 35 },
+			{ task: 'rf-001-command-output-hash', cost_usd: 0.138, duration_s: 23, complexity_max: 12, cognitive_max: 11, maintainability: 28.08, naming_score: 90, overeng_score: 100, personality_compliance: 87, lines: 172, output_tokens: 1153, max_func_len: 60 }
+		]
+	},
+	opinionated: {
+		label: 'opinionated',
+		color: '#f59e0b',
+		colorAlpha: 'rgba(245, 158, 11, 0.25)',
+		data: [
+			{ task: 'he-000-has-close-elements', cost_usd: 0.185, duration_s: 24, complexity_max: 8, cognitive_max: 6, maintainability: 48.48, naming_score: 100, overeng_score: 100, personality_compliance: 46, lines: 36, output_tokens: 559, max_func_len: 13 },
+			{ task: 'mbpp-011-remove-occ', cost_usd: 0.237, duration_s: 44, complexity_max: 4, cognitive_max: 4, maintainability: 59.22, naming_score: 85, overeng_score: 100, personality_compliance: 50, lines: 16, output_tokens: 894, max_func_len: 8 },
+			{ task: 'ex-bowling', cost_usd: 0.271, duration_s: 32, complexity_max: 8, cognitive_max: 11, maintainability: 19.64, naming_score: 95, overeng_score: 100, personality_compliance: 83, lines: 294, output_tokens: 1467, max_func_len: 19 },
+			{ task: 'ce-000-regex-utils', cost_usd: 0.389, duration_s: 78, complexity_max: 1, cognitive_max: 0, maintainability: 20.31, naming_score: 90, overeng_score: 100, personality_compliance: 100, lines: 374, output_tokens: 4388, max_func_len: 35 },
+			{ task: 'rf-001-command-output-hash', cost_usd: 0.258, duration_s: 35, complexity_max: 12, cognitive_max: 11, maintainability: 28.08, naming_score: 90, overeng_score: 100, personality_compliance: 87, lines: 172, output_tokens: 2182, max_func_len: 60 }
+		]
+	}
+};
+
+const PROFILE_ORDER = ['blank', 'main', 'opinionated'];
+
+// ─── DERIVED METRICS ─────────────────────────────────────────────────────────
+// Compute token efficiency (output_tokens / lines_generated) for each task.
+// Lower = more efficient (fewer tokens wasted on explanation per line of code).
+
+PROFILE_ORDER.forEach(pk => {
+	profiles[pk].data.forEach(d => {
+		d.token_efficiency = d.lines > 0 ? +(d.output_tokens / d.lines).toFixed(1) : 0;
+	});
+});
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+
+function avg(arr) { return arr.reduce((a, b) => a + b, 0) / arr.length; }
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function getField(profileKey, field) {
+	return profiles[profileKey].data.map(d => d[field]);
+}
+
+// ─── CHART.JS DEFAULTS ───────────────────────────────────────────────────────
+
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.borderColor = '#334155';
+Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+
+const barChartOptions = (label, formatter) => ({
+	responsive: true,
+	maintainAspectRatio: true,
+	plugins: {
+		legend: {
+			position: 'top',
+			labels: { usePointStyle: true, pointStyle: 'rectRounded', padding: 16 }
+		},
+		tooltip: {
+			backgroundColor: '#1e293b',
+			titleColor: '#f1f5f9',
+			bodyColor: '#cbd5e1',
+			borderColor: '#475569',
+			borderWidth: 1,
+			padding: 10,
+			callbacks: {
+				label: function(ctx) {
+					return ctx.dataset.label + ': ' + (formatter ? formatter(ctx.parsed.y) : ctx.parsed.y);
+				}
+			}
+		}
+	},
+	scales: {
+		x: {
+			ticks: { color: '#94a3b8', font: { size: 11 }, maxRotation: 0 },
+			grid: { display: false }
+		},
+		y: {
+			ticks: {
+				color: '#94a3b8',
+				callback: formatter || undefined
+			},
+			grid: { color: '#1e3a5f22' },
+			title: { display: true, text: label, color: '#94a3b8' }
+		}
+	}
+});
+
+function makeBarDatasets(field) {
+	return PROFILE_ORDER.map(pk => ({
+		label: profiles[pk].label,
+		data: getField(pk, field),
+		backgroundColor: profiles[pk].color,
+		borderColor: profiles[pk].color,
+		borderWidth: 0,
+		borderRadius: 4,
+		barPercentage: 0.8,
+		categoryPercentage: 0.7
+	}));
+}
+
+// ─── 1. TOTAL COST SUMMARY CARDS ─────────────────────────────────────────────
+
+(function renderSummaryCards() {
+	const container = document.getElementById('summaryCards');
+	PROFILE_ORDER.forEach(pk => {
+		const total = profiles[pk].data.reduce((s, d) => s + d.cost_usd, 0);
+		const avgDur = avg(profiles[pk].data.map(d => d.duration_s));
+		const card = document.createElement('div');
+		card.className = 'summary-card';
+		card.innerHTML = `
+			<div class="profile-label profile-${pk}">${pk.toUpperCase()}</div>
+			<div class="cost-value profile-${pk}">$${total.toFixed(3)}</div>
+			<div class="cost-detail">Total cost across 5 tasks &bull; Avg ${avgDur.toFixed(0)}s per task</div>
+		`;
+		container.appendChild(card);
+	});
+})();
+
+// ─── 2. COST PER TASK ────────────────────────────────────────────────────────
+
+new Chart(document.getElementById('chartCost'), {
+	type: 'bar',
+	data: { labels: TASK_LABELS, datasets: makeBarDatasets('cost_usd') },
+	options: barChartOptions('Cost (USD)', v => '$' + v.toFixed(3))
+});
+
+// ─── 3. DURATION PER TASK ────────────────────────────────────────────────────
+
+new Chart(document.getElementById('chartDuration'), {
+	type: 'bar',
+	data: { labels: TASK_LABELS, datasets: makeBarDatasets('duration_s') },
+	options: barChartOptions('Duration (seconds)', v => v + 's')
+});
+
+// ─── 4. CODE QUALITY RADAR ──────────────────────────────────────────────────
+
+(function renderRadar() {
+	// Focus on ex-bowling — the task with the most profile differentiation.
+	// Only 3 axes that show meaningful differentiation between profiles.
+	// Axes are normalized so higher = better code quality.
+	const axes = [
+		['Function', 'Decomposition'],
+		['Cognitive', 'Simplicity'],
+		['Cyclomatic', 'Control']
+	];
+
+	// ex-bowling raw values per profile
+	const bowling = {};
+	PROFILE_ORDER.forEach(pk => {
+		bowling[pk] = profiles[pk].data.find(d => d.task === 'ex-bowling');
+	});
+	// Guard: if ex-bowling data is missing for any profile, skip this chart
+	if (PROFILE_ORDER.some(pk => !bowling[pk])) return;
+
+	// Normalization rationale:
+	// - Function Decomposition: 100 - max_func_len. Range in data: 19-64.
+	//   Maps to 36-81. Good spread across the 100-point scale.
+	// - Cognitive Simplicity: 100 - cognitive_max * 2. The *2 amplifies
+	//   differences because raw cognitive values (11-38) would only span
+	//   62-89 without it. With *2, span is 24-78. Values > 50 clip to 0,
+	//   which is appropriate (cognitive_max > 50 = genuinely complex code).
+	// - Cyclomatic Control: 100 - complexity_max * 3. Similar rationale:
+	//   raw values (8-23) span 77-92 without multiplier. With *3, span is
+	//   31-76. The *3 reflects that each branch point has outsized impact
+	//   on testability (each branch roughly doubles test paths).
+	function computeRadarValues(pk) {
+		const d = bowling[pk];
+		return [
+			clamp(100 - d.max_func_len, 0, 100),
+			clamp(100 - d.cognitive_max * 2, 0, 100),
+			clamp(100 - d.complexity_max * 3, 0, 100)
+		];
+	}
+
+	const datasets = PROFILE_ORDER.map(pk => ({
+		label: profiles[pk].label,
+		data: computeRadarValues(pk),
+		borderColor: profiles[pk].color,
+		backgroundColor: profiles[pk].colorAlpha,
+		pointBackgroundColor: profiles[pk].color,
+		pointBorderColor: profiles[pk].color,
+		pointRadius: 5,
+		borderWidth: 2.5
+	}));
+
+	new Chart(document.getElementById('chartRadar'), {
+		type: 'radar',
+		data: { labels: axes, datasets },
+		options: {
+			responsive: true,
+			maintainAspectRatio: true,
+			plugins: {
+				legend: {
+					position: 'top',
+					labels: { usePointStyle: true, pointStyle: 'rectRounded', padding: 16 }
+				},
+				tooltip: {
+					backgroundColor: '#1e293b',
+					titleColor: '#f1f5f9',
+					bodyColor: '#cbd5e1',
+					borderColor: '#475569',
+					borderWidth: 1,
+					callbacks: {
+						label: ctx => ctx.dataset.label + ': ' + ctx.parsed.r.toFixed(1)
+					}
+				}
+			},
+			scales: {
+				r: {
+					min: 0,
+					max: 100,
+					ticks: { stepSize: 20, color: '#64748b', backdropColor: 'transparent', font: { size: 10 } },
+					grid: { color: '#33415544' },
+					angleLines: { color: '#33415544' },
+					pointLabels: { color: '#cbd5e1', font: { size: 12 } }
+				}
+			}
+		}
+	});
+})();
+
+// ─── 5. MAX FUNCTION LENGTH ─────────────────────────────────────────────────
+
+new Chart(document.getElementById('chartFuncLen'), {
+	type: 'bar',
+	data: { labels: TASK_LABELS, datasets: makeBarDatasets('max_func_len') },
+	options: barChartOptions('Max Function Length (lines)', v => v + ' lines')
+});
+
+// ─── 6. TOKEN EFFICIENCY ────────────────────────────────────────────────────
+
+new Chart(document.getElementById('chartTokenEff'), {
+	type: 'bar',
+	data: { labels: TASK_LABELS, datasets: makeBarDatasets('token_efficiency') },
+	options: barChartOptions('Tokens / Line', v => v.toFixed(1) + ' tok/line')
+});
+
+// ─── 7. COST vs QUALITY SCATTER (PARETO) ────────────────────────────────────
+
+(function renderPareto() {
+	// Shape markers per profile for accessibility
+	const SHAPES = { blank: 'circle', main: 'rectRot', opinionated: 'triangle' };
+
+	const datasets = PROFILE_ORDER.map(pk => ({
+		label: profiles[pk].label,
+		data: profiles[pk].data.map((d, i) => ({
+			x: d.cost_usd,
+			y: d.cognitive_max,
+			task: TASKS[i]
+		})),
+		backgroundColor: profiles[pk].color,
+		borderColor: profiles[pk].color,
+		pointStyle: SHAPES[pk],
+		pointRadius: 8,
+		pointHoverRadius: 11
+	}));
+
+	new Chart(document.getElementById('chartPareto'), {
+		type: 'scatter',
+		data: { datasets },
+		options: {
+			responsive: true,
+			maintainAspectRatio: true,
+			plugins: {
+				legend: {
+					position: 'top',
+					labels: { usePointStyle: true, padding: 16 }
+				},
+				tooltip: {
+					backgroundColor: '#1e293b',
+					titleColor: '#f1f5f9',
+					bodyColor: '#cbd5e1',
+					borderColor: '#475569',
+					borderWidth: 1,
+					callbacks: {
+						title: ctx => ctx[0].raw.task,
+						label: ctx => {
+							const p = ctx.dataset.label;
+							return `${p}: $${ctx.raw.x.toFixed(3)} cost, ${ctx.raw.y} cognitive complexity`;
+						}
+					}
+				}
+			},
+			scales: {
+				x: {
+					title: { display: true, text: 'Cost (USD)', color: '#94a3b8' },
+					ticks: { color: '#94a3b8', callback: v => '$' + v.toFixed(2) },
+					grid: { color: '#1e3a5f22' }
+				},
+				y: {
+					title: { display: true, text: 'Cognitive Complexity (max)', color: '#94a3b8' },
+					ticks: { color: '#94a3b8' },
+					grid: { color: '#1e3a5f22' }
+				}
+			}
+		}
+	});
+})();
+
+// ─── 8. MARGINAL COST TABLE ─────────────────────────────────────────────────
+
+(function renderMarginalTable() {
+	const table = document.getElementById('marginalTable');
+
+	const thead = document.createElement('thead');
+	const hrow = document.createElement('tr');
+	['Task', 'Blank Cost', 'Opinionated Cost', 'Cost Premium', 'Cognitive Improvement', 'Verdict'].forEach(h => {
+		const th = document.createElement('th');
+		th.textContent = h;
+		hrow.appendChild(th);
+	});
+	thead.appendChild(hrow);
+	table.appendChild(thead);
+
+	const tbody = document.createElement('tbody');
+	TASKS.forEach((task, i) => {
+		const blankD = profiles.blank.data[i];
+		const opinD = profiles.opinionated.data[i];
+		const costDelta = opinD.cost_usd - blankD.cost_usd;
+		const cogDelta = blankD.cognitive_max - opinD.cognitive_max;
+		const cogPct = blankD.cognitive_max > 0
+			? Math.round((cogDelta / blankD.cognitive_max) * 100)
+			: 0;
+
+		let verdict, verdictColor;
+		if (cogDelta <= 0) {
+			verdict = 'No benefit';
+			verdictColor = '#ef4444';
+		} else if (costDelta <= 0) {
+			verdict = 'Free improvement';
+			verdictColor = '#22c55e';
+		} else {
+			verdict = 'Pays off';
+			verdictColor = '#f59e0b';
+		}
+
+		const row = document.createElement('tr');
+
+		const tdTask = document.createElement('td');
+		tdTask.textContent = task;
+		row.appendChild(tdTask);
+
+		const tdBlank = document.createElement('td');
+		tdBlank.textContent = '$' + blankD.cost_usd.toFixed(3);
+		tdBlank.style.backgroundColor = '#1e293b';
+		tdBlank.style.color = '#94a3b8';
+		row.appendChild(tdBlank);
+
+		const tdOpin = document.createElement('td');
+		tdOpin.textContent = '$' + opinD.cost_usd.toFixed(3);
+		tdOpin.style.backgroundColor = '#1e293b';
+		tdOpin.style.color = '#f59e0b';
+		row.appendChild(tdOpin);
+
+		const tdPremium = document.createElement('td');
+		tdPremium.textContent = (costDelta >= 0 ? '+' : '') + '$' + costDelta.toFixed(3);
+		tdPremium.style.backgroundColor = '#1e293b';
+		tdPremium.style.color = costDelta > 0 ? '#ef4444' : '#22c55e';
+		row.appendChild(tdPremium);
+
+		const tdCog = document.createElement('td');
+		tdCog.textContent = cogDelta > 0 ? `-${cogDelta} (${cogPct}% simpler)` : 'No change';
+		tdCog.style.backgroundColor = '#1e293b';
+		tdCog.style.color = cogDelta > 0 ? '#22c55e' : '#94a3b8';
+		row.appendChild(tdCog);
+
+		const tdVerdict = document.createElement('td');
+		tdVerdict.textContent = verdict;
+		tdVerdict.style.backgroundColor = '#1e293b';
+		tdVerdict.style.color = verdictColor;
+		tdVerdict.style.fontWeight = '600';
+		row.appendChild(tdVerdict);
+
+		tbody.appendChild(row);
+	});
+	table.appendChild(tbody);
+})();
+
+// ─── 9. COMPLEXITY HEATMAP ──────────────────────────────────────────────────
+
+(function renderHeatmap() {
+	const table = document.getElementById('heatmapTable');
+
+	// Header
+	const thead = document.createElement('thead');
+	const hrow = document.createElement('tr');
+	['Task', ...PROFILE_ORDER].forEach(h => {
+		const th = document.createElement('th');
+		th.textContent = h;
+		hrow.appendChild(th);
+	});
+	thead.appendChild(hrow);
+	table.appendChild(thead);
+
+	// Collect all complexity values for color scaling
+	const allVals = [];
+	PROFILE_ORDER.forEach(pk => profiles[pk].data.forEach(d => allVals.push(d.complexity_max)));
+	const minVal = Math.min(...allVals);
+	const maxVal = Math.max(...allVals);
+
+	function heatColor(v) {
+		const t = maxVal === minVal ? 0 : (v - minVal) / (maxVal - minVal);
+		// green (low) -> yellow (mid) -> red (high)
+		if (t <= 0.5) {
+			const p = t * 2;
+			const r = Math.round(34 + p * (234 - 34));
+			const g = Math.round(197 - p * (197 - 179));
+			const b = Math.round(94 - p * (94 - 8));
+			return `rgb(${r},${g},${b})`;
+		} else {
+			const p = (t - 0.5) * 2;
+			const r = Math.round(234 + p * (239 - 234));
+			const g = Math.round(179 - p * (179 - 68));
+			const b = Math.round(8 - p * (8 - 68));
+			return `rgb(${r},${g},${b})`;
+		}
+	}
+
+	function textColor(v) {
+		const t = maxVal === minVal ? 0 : (v - minVal) / (maxVal - minVal);
+		return t > 0.3 ? '#0f172a' : '#e2e8f0';
+	}
+
+	const tbody = document.createElement('tbody');
+	TASKS.forEach((task, i) => {
+		const row = document.createElement('tr');
+		const tdTask = document.createElement('td');
+		tdTask.textContent = task;
+		row.appendChild(tdTask);
+
+		PROFILE_ORDER.forEach(pk => {
+			const val = profiles[pk].data[i].complexity_max;
+			const td = document.createElement('td');
+			td.textContent = val;
+			td.style.backgroundColor = heatColor(val);
+			td.style.color = textColor(val);
+			row.appendChild(td);
+		});
+
+		tbody.appendChild(row);
+	});
+	table.appendChild(tbody);
+})();
+</script>
+
+</body>
+</html>
