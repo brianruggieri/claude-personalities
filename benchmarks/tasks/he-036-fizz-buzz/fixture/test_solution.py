@@ -1,8 +1,6 @@
 from solution import fizz_buzz
 
 
-
-
 METADATA = {}
 
 

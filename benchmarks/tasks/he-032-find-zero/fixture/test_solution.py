@@ -1,8 +1,6 @@
 from solution import find_zero, poly
 
 
-
-
 METADATA = {}
 
 

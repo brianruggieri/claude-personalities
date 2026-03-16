@@ -1,8 +1,6 @@
 from solution import make_palindrome
 
 
-
-
 METADATA = {
     'author': 'jt',
     'dataset': 'test'

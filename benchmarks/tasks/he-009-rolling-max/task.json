@@ -3,7 +3,7 @@
   "description": "Complete the rolling_max function",
   "category": "function-completion",
   "capability": "code-generation",
-  "difficulty": "basic",
+  "difficulty": "intermediate",
   "timeout": 120,
   "scoring": "binary",
   "metrics": [
@@ -22,6 +22,7 @@
   "source": {
     "dataset": "HumanEval",
     "task_id": "HumanEval/9",
-    "entry_point": "rolling_max"
+    "entry_point": "rolling_max",
+    "license": "MIT"
   }
 }

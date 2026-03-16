@@ -1,8 +1,6 @@
 from solution import intersperse
 
 
-
-
 METADATA = {
     'author': 'jt',
     'dataset': 'test'

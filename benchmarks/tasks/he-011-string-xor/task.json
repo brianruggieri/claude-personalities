@@ -22,6 +22,7 @@
   "source": {
     "dataset": "HumanEval",
     "task_id": "HumanEval/11",
-    "entry_point": "string_xor"
+    "entry_point": "string_xor",
+    "license": "MIT"
   }
 }

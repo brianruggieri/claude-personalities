@@ -1,8 +1,6 @@
 from solution import max_element
 
 
-
-
 METADATA = {}
 
 

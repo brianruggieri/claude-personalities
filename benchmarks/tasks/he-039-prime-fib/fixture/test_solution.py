@@ -1,8 +1,6 @@
 from solution import prime_fib
 
 
-
-
 METADATA = {}
 
 

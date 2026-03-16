@@ -1,8 +1,6 @@
 from solution import is_prime
 
 
-
-
 METADATA = {}
 
 

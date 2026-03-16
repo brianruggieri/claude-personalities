@@ -1,8 +1,6 @@
 from solution import longest
 
 
-
-
 METADATA = {
     'author': 'jt',
     'dataset': 'test'

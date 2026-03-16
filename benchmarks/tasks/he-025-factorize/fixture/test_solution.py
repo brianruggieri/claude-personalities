@@ -1,8 +1,6 @@
 from solution import factorize
 
 
-
-
 METADATA = {
     'author': 'jt',
     'dataset': 'test'

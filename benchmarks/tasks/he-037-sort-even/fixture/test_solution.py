@@ -1,8 +1,6 @@
 from solution import sort_even
 
 
-
-
 METADATA = {}
 
 

@@ -1,8 +1,6 @@
 from solution import find_closest_elements
 
 
-
-
 METADATA = {
     'author': 'jt',
     'dataset': 'test'

@@ -1,8 +1,6 @@
 from solution import separate_paren_groups
 
 
-
-
 METADATA = {
     'author': 'jt',
     'dataset': 'test'

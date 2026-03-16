@@ -1,8 +1,6 @@
 from solution import below_zero
 
 
-
-
 METADATA = {
     'author': 'jt',
     'dataset': 'test'

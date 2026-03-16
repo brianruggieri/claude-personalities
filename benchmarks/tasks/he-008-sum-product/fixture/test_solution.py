@@ -1,8 +1,6 @@
 from solution import sum_product
 
 
-
-
 METADATA = {
     'author': 'jt',
     'dataset': 'test'

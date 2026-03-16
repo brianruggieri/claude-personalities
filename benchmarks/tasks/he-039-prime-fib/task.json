@@ -22,6 +22,7 @@
   "source": {
     "dataset": "HumanEval",
     "task_id": "HumanEval/39",
-    "entry_point": "prime_fib"
+    "entry_point": "prime_fib",
+    "license": "MIT"
   }
 }

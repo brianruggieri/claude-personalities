@@ -22,6 +22,7 @@
   "source": {
     "dataset": "HumanEval",
     "task_id": "HumanEval/10",
-    "entry_point": "make_palindrome"
+    "entry_point": "make_palindrome",
+    "license": "MIT"
   }
 }

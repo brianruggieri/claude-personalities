@@ -22,6 +22,7 @@
   "source": {
     "dataset": "HumanEval",
     "task_id": "HumanEval/3",
-    "entry_point": "below_zero"
+    "entry_point": "below_zero",
+    "license": "MIT"
   }
 }

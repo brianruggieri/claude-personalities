@@ -1,8 +1,6 @@
 from solution import how_many_times
 
 
-
-
 METADATA = {
     'author': 'jt',
     'dataset': 'test'

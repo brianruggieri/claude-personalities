@@ -1,8 +1,6 @@
 from solution import parse_nested_parens
 
 
-
-
 METADATA = {
     'author': 'jt',
     'dataset': 'test'

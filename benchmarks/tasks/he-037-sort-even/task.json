@@ -3,7 +3,7 @@
   "description": "Complete the sort_even function",
   "category": "function-completion",
   "capability": "code-generation",
-  "difficulty": "basic",
+  "difficulty": "intermediate",
   "timeout": 120,
   "scoring": "binary",
   "metrics": [
@@ -22,6 +22,7 @@
   "source": {
     "dataset": "HumanEval",
     "task_id": "HumanEval/37",
-    "entry_point": "sort_even"
+    "entry_point": "sort_even",
+    "license": "MIT"
   }
 }

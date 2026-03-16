@@ -1,8 +1,6 @@
 from solution import has_close_elements
 
 
-
-
 METADATA = {
     'author': 'jt',
     'dataset': 'test'

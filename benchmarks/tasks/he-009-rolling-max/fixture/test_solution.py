@@ -1,8 +1,6 @@
 from solution import rolling_max
 
 
-
-
 METADATA = {
     'author': 'jt',
     'dataset': 'test'

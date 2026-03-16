@@ -122,13 +122,13 @@ def estimate_complexity(solution_code):
 
 def difficulty_from_lines(num_lines):
     """Map solution line count to difficulty string."""
-    if num_lines <= 5:
+    if num_lines <= 3:
         return "trivial"
-    elif num_lines <= 10:
+    elif num_lines <= 8:
         return "basic"
-    elif num_lines <= 20:
+    elif num_lines <= 15:
         return "intermediate"
-    elif num_lines <= 35:
+    elif num_lines <= 30:
         return "advanced"
     else:
         return "expert"
@@ -212,7 +212,8 @@ def import_humaneval(args):
             "source": {
                 "dataset": "HumanEval",
                 "task_id": entry['task_id'],
-                "entry_point": entry_point
+                "entry_point": entry_point,
+                "license": "MIT"
             }
         }
 
@@ -226,7 +227,7 @@ def import_humaneval(args):
         """)
 
         # fixture/solution.py — prompt (signature + docstring) + pass
-        solution_py = prompt_code.rstrip() + "\n    pass\n"
+        solution_py = prompt_code.strip() + "\n    pass\n"
 
         # fixture/test_solution.py
         test_solution_py = _build_he_test(entry_point, test_code, prompt_code)
@@ -239,6 +240,12 @@ def import_humaneval(args):
             "solution.py": solution_py,
             "test_solution.py": test_solution_py,
         }
+
+        # Skip if task directory already exists
+        task_dir = os.path.join(TASKS_DIR, name)
+        if os.path.isdir(task_dir) and not args.dry_run:
+            print(f"  Skipping {name} (already exists)")
+            continue
 
         print(f"  {'[dry-run] ' if args.dry_run else ''}Creating {name} (difficulty={difficulty}, lines={sol_lines})")
         create_task_dir(name, task_json, prompt_md, verify_sh, fixture_files, dry_run=args.dry_run)
@@ -282,8 +289,8 @@ def _build_he_test(entry_point, test_code, prompt_code):
     lines.append("")
     lines.append("")
 
-    # Add the test code as-is
-    lines.append(test_code.rstrip())
+    # Add the test code as-is (strip leading blank lines too)
+    lines.append(test_code.strip())
     lines.append("")
 
     # Call check with the entry_point

@@ -3,7 +3,7 @@
   "description": "Complete the fizz_buzz function",
   "category": "function-completion",
   "capability": "code-generation",
-  "difficulty": "basic",
+  "difficulty": "intermediate",
   "timeout": 120,
   "scoring": "binary",
   "metrics": [
@@ -22,6 +22,7 @@
   "source": {
     "dataset": "HumanEval",
     "task_id": "HumanEval/36",
-    "entry_point": "fizz_buzz"
+    "entry_point": "fizz_buzz",
+    "license": "MIT"
   }
 }

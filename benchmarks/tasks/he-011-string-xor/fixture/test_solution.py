@@ -1,8 +1,6 @@
 from solution import string_xor
 
 
-
-
 METADATA = {
     'author': 'jt',
     'dataset': 'test'
