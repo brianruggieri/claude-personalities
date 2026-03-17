@@ -19,8 +19,8 @@ VAR_NAME_RE = re.compile(r'\b[a-z_][a-z0-9_]*\b')
 def normalize_body(source_lines, node):
 	"""Extract and normalize a function body for comparison.
 
-	Strips whitespace and replaces variable names with placeholders
-	to detect structurally similar functions.
+	Strips whitespace and replaces locally-assigned variable names with
+	placeholders to detect structurally similar functions.
 	"""
 	start = node.lineno - 1
 	end = getattr(node, 'end_lineno', None)
@@ -30,18 +30,30 @@ def normalize_body(source_lines, node):
 	if not body_lines:
 		return ''
 
-	# Join and strip leading indentation uniformly
+	# Collect locally assigned variable names from the function AST
+	local_names = set()
+	for child in ast.walk(node):
+		if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Store):
+			local_names.add(child.id)
+	# Include function parameters
+	for arg in node.args.args + node.args.posonlyargs + node.args.kwonlyargs:
+		local_names.add(arg.arg)
+	if node.args.vararg:
+		local_names.add(node.args.vararg.arg)
+	if node.args.kwarg:
+		local_names.add(node.args.kwarg.arg)
+
 	text = '\n'.join(line.strip() for line in body_lines if line.strip())
 
-	# Replace variable names with a placeholder to normalize
 	seen = {}
 	counter = [0]
 
 	def replace_var(match):
 		name = match.group(0)
-		# Skip Python keywords and builtins
 		if name in PYTHON_KEYWORDS:
 			return name
+		if name not in local_names:
+			return name  # Preserve non-local names
 		if name not in seen:
 			seen[name] = f'VAR{counter[0]}'
 			counter[0] += 1
@@ -62,8 +74,8 @@ PYTHON_KEYWORDS = frozenset({
 	'super', 'open', 'hasattr', 'getattr', 'setattr',
 })
 
-SIMILARITY_THRESHOLD = 0.8
-MIN_BODY_LENGTH = 20
+SIMILARITY_THRESHOLD = 0.9
+MIN_BODY_LENGTH = 50
 
 
 try:
