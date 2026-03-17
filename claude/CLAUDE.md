@@ -34,3 +34,15 @@ pyenv versions
 ```
 
 If no versions are installed, prompt me before installing one.
+
+## Code Standards — Hard Limits
+
+These are non-negotiable. If code violates any of these, refactor before committing.
+
+- **Functions:** Maximum 20 lines. Decompose into smaller, named helpers with clear single responsibilities.
+- **Cyclomatic complexity:** Maximum 5 per function. Extract conditions into named predicates. Replace nested chains with dispatch tables or early returns.
+- **Cognitive complexity:** Maximum 8 per function. Reduce nesting by extracting inner blocks. Flatten control flow with guard clauses.
+- **Conciseness:** Prefer concise solutions. Don't decompose trivial problems that are clear as a single function.
+- **No unnecessary abstractions.** No wrapper functions, adapter patterns, or helper functions that are called only once unless they improve readability.
+- **No magic numbers.** Every numeric literal (except 0, 1, -1) must be a named constant.
+- **No commented-out code.** Delete it.
