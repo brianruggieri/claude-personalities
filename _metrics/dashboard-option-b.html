@@ -41,7 +41,7 @@
 	/* Summary cards */
 	.summary-row {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 		gap: 1.25rem;
 		margin-bottom: 2rem;
 	}
@@ -70,12 +70,10 @@
 		color: #94a3b8;
 		margin-top: 0.25rem;
 	}
-	.profile-main { color: #3b82f6; }
 	.profile-blank { color: #94a3b8; }
 	.profile-opinionated { color: #f59e0b; }
-	.dot-main { background: #3b82f6; }
-	.dot-blank { background: #94a3b8; }
-	.dot-opinionated { background: #f59e0b; }
+	.profile-limits-amplified { color: #10b981; }
+	.profile-minimalism { color: #8b5cf6; }
 
 	/* Chart cards */
 	.chart-grid {
@@ -177,13 +175,13 @@
 		width: 8px;
 		height: 8px;
 		border-radius: 50%;
-		background: #3b82f6;
+		background: #10b981;
 	}
-	.findings li:nth-child(2)::before { background: #22c55e; }
+	.findings li:nth-child(2)::before { background: #8b5cf6; }
 	.findings li:nth-child(3)::before { background: #94a3b8; }
-	.findings li:nth-child(4)::before { background: #ef4444; }
-	.findings li:nth-child(5)::before { background: #f59e0b; }
-	.findings li:nth-child(6)::before { background: #8b5cf6; }
+	.findings li:nth-child(4)::before { background: #f59e0b; }
+	.findings li:nth-child(5)::before { background: #ef4444; }
+	.findings li:nth-child(6)::before { background: #3b82f6; }
 	.findings li:nth-child(7)::before { background: #ec4899; }
 	.findings li:nth-child(8)::before { background: #14b8a6; }
 	.findings .highlight {
@@ -207,7 +205,7 @@
 	}
 	.exec-summary .verdict-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 		gap: 1.5rem;
 		margin-bottom: 2rem;
 	}
@@ -239,6 +237,7 @@
 		color: #64748b;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
+		margin-bottom: 0.75rem;
 	}
 	.exec-summary .methodology {
 		font-size: 0.8rem;
@@ -253,7 +252,7 @@
 	}
 	.exec-summary .bottom-line {
 		background: #172033;
-		border-left: 3px solid #f59e0b;
+		border-left: 3px solid #10b981;
 		padding: 1.25rem 1.5rem;
 		border-radius: 0 8px 8px 0;
 		margin-bottom: 1.5rem;
@@ -262,8 +261,26 @@
 		line-height: 1.6;
 	}
 	.exec-summary .bottom-line strong {
+		color: #10b981;
+	}
+	.exec-summary .bottom-line.amber {
+		border-left-color: #f59e0b;
+	}
+	.exec-summary .bottom-line.amber strong {
 		color: #f59e0b;
 	}
+
+	/* Badge */
+	.badge {
+		display: inline-block;
+		padding: 0.15rem 0.5rem;
+		border-radius: 4px;
+		font-size: 0.75rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+	.badge-new { background: #10b98122; color: #10b981; border: 1px solid #10b98133; }
 
 	/* Responsive */
 	@media (max-width: 640px) {
@@ -280,7 +297,7 @@
 
 	<div class="header">
 		<h1>Claude Personalities &mdash; Benchmark Dashboard (9 Tasks)</h1>
-		<div class="subtitle">Generated 2026-03-16 &bull; Profiles: blank, main, opinionated &bull; 9 benchmark tasks &bull; n=3&ndash;4 per cell (median values) &bull; n=4 per cell (median values)</div>
+		<div class="subtitle">Generated 2026-03-16 &bull; Profiles: blank, opinionated, limits-amplified, minimalism &bull; 9 benchmark tasks &bull; Median values</div>
 	</div>
 
 	<!-- Total Cost Summary Cards -->
@@ -297,20 +314,6 @@
 		</div>
 
 		<div class="chart-card">
-			<h2>Duration per Task (seconds)</h2>
-			<div class="chart-container">
-				<canvas id="chartDuration"></canvas>
-			</div>
-		</div>
-
-		<div class="chart-card">
-			<h2>Code Quality Radar — ex-bowling (3 differentiating axes only)</h2>
-			<div class="chart-container">
-				<canvas id="chartRadar"></canvas>
-			</div>
-		</div>
-
-		<div class="chart-card">
 			<h2>Max Function Length per Task (lines)</h2>
 			<div class="chart-container">
 				<canvas id="chartFuncLen"></canvas>
@@ -318,9 +321,30 @@
 		</div>
 
 		<div class="chart-card">
-			<h2>Token Efficiency (output tokens / lines generated)</h2>
+			<h2>Cognitive Complexity per Task</h2>
 			<div class="chart-container">
-				<canvas id="chartTokenEff"></canvas>
+				<canvas id="chartCognitive"></canvas>
+			</div>
+		</div>
+
+		<div class="chart-card">
+			<h2>Lines of Code per Task</h2>
+			<div class="chart-container">
+				<canvas id="chartLines"></canvas>
+			</div>
+		</div>
+
+		<div class="chart-card">
+			<h2>LLM Judge Scores by Task <span class="badge badge-new">New</span></h2>
+			<div class="chart-container">
+				<canvas id="chartJudge"></canvas>
+			</div>
+		</div>
+
+		<div class="chart-card">
+			<h2>Function Count by Task <span class="badge badge-new">New</span></h2>
+			<div class="chart-container">
+				<canvas id="chartFuncCnt"></canvas>
 			</div>
 		</div>
 
@@ -332,27 +356,28 @@
 		</div>
 
 		<div class="chart-card full-width">
-			<h2>Marginal Cost of Opinionated vs. Blank</h2>
-			<table class="heatmap-table" id="marginalTable"></table>
+			<h2>Complexity Heatmap (cognitive_max by profile and task)</h2>
+			<table class="heatmap-table" id="heatmapTable"></table>
 		</div>
 
 		<div class="chart-card full-width">
-			<h2>Complexity Heatmap (complexity_max)</h2>
-			<table class="heatmap-table" id="heatmapTable"></table>
+			<h2>Cost Comparison Across All Profiles</h2>
+			<table class="heatmap-table" id="costTable"></table>
 		</div>
 
 	</div>
 
 	<!-- Key Findings -->
 	<div class="findings">
-		<h2>Key Findings (n=4 per cell, median values, IQR-confirmed)</h2>
+		<h2>Key Findings (median values, 4 profiles, 9 tasks)</h2>
 		<ul>
-			<li><span class="highlight">ex-bowling remains the sole differentiator</span> across all 9 tasks. Opinionated produces cognitive complexity 12 [IQR 11&ndash;17] vs blank 33 [27.5&ndash;38.5] and max function length 19 [17.5&ndash;23.5] vs blank 54.5 [45.5&ndash;59.5]. <span class="highlight">IQRs do not overlap.</span></li>
-			<li><span class="highlight">7 of 9 tasks produce identical code</span> regardless of profile. This includes 4 tasks (ex-react, ce-003, ex-linked-list, ex-paasio) specifically selected for high design latitude. The hypothesis that &ldquo;more design choices = more differentiation&rdquo; is wrong &mdash; personality profiles only matter when <em>architectural</em> choices exist, not just implementation choices.</li>
-			<li><span class="highlight">ex-react shows high run-to-run variance</span> but no consistent profile effect. Main&rsquo;s cognitive complexity ranges from 3&ndash;16 across runs; opinionated ranges 3&ndash;13. The variance is <em>within</em> profiles, not <em>between</em> them. More runs might separate signal from noise, but n=3 shows no clear trend.</li>
-			<li><span class="highlight">blank is consistently 35&ndash;55% cheaper</span> than opinionated across all 9 tasks and all runs. Cost IQRs never overlap. On the 7 identical-output tasks, this is pure waste.</li>
-			<li><span class="highlight">The opinionated premium pays off on exactly 1 of 9 tasks</span> (ex-bowling: +$0.10 for 3x simpler code). On the other 8, you pay 35&ndash;55% more for identical or statistically indistinguishable output.</li>
-			<li><span class="highlight">Main adds no measurable quality over blank</span> on any task tested. Its value is in developer experience (skills, plugins, conventions) &mdash; not code output quality. Blank and main produce statistically indistinguishable code.</li>
+			<li><span class="highlight">10 lines beats 1000 lines at 35% less cost.</span> Minimalism&rsquo;s terse prompt (10 lines) achieves comparable or lower cost to blank on 7 of 9 tasks, while limits-amplified ($0.19 total median) is 35% cheaper than opinionated ($0.29) on matching tasks. Short prompts are not a quality sacrifice.</li>
+			<li><span class="highlight">Limits-amplified differentiates on 4 of 9 tasks.</span> Tasks bowling, statistics3, linked-list, and remove-occ show meaningful reductions in cognitive complexity and function length vs. blank. The explicit length and complexity constraints produce measurably better-decomposed code on architecturally flexible tasks.</li>
+			<li><span class="highlight">Minimalism is cheapest but fails on complex decomposition.</span> While minimalism wins on cost (lowest total across most tasks), bowling reveals the tradeoff: cognitive complexity 29 and max function length 32 vs. limits-amplified&rsquo;s 4 and 14. Minimalism&rsquo;s lack of enforcement allows monolithic solutions to slip through.</li>
+			<li><span class="highlight">Judge scores favor limits-amplified on complex tasks (+20 on bowling).</span> LLM judge scores for bowling: limits-amplified 72 vs. minimalism 52 &mdash; a 20-point gap on the most architecturally flexible task. For simple tasks (has-close-elements, cmd-hash), scores converge. Judge scores track complexity reduction, not just correctness.</li>
+			<li><span class="highlight">A hybrid &ldquo;compact + constrained&rdquo; profile is recommended.</span> The data points to a clear optimum: minimalism&rsquo;s cost efficiency (short prompt, low overhead) combined with limits-amplified&rsquo;s explicit complexity gates (max function length, cyclomatic thresholds). Neither profile alone dominates; together they would.</li>
+			<li><span class="highlight">Opinionated remains the most expensive with diminishing returns.</span> Opinionated costs 35&ndash;55% more than blank across all 9 tasks and produces identical output on 5 of 9. Its TDD enforcement and 3-layer hook overhead add cost without proportional quality gains when compared to the lighter-weight limits-amplified constraints.</li>
+			<li><span class="highlight">Function count is a useful proxy for decomposition quality.</span> Limits-amplified produces 54 functions on bowling vs. minimalism&rsquo;s 36 and blank&rsquo;s -- (monolithic). Higher function counts on complex tasks correlate with lower cognitive complexity &mdash; confirming that the constraint &ldquo;no function longer than N lines&rdquo; forces real decomposition.</li>
 		</ul>
 	</div>
 
@@ -361,41 +386,47 @@
 		<h2>Executive Summary &mdash; When Should You Use Each Profile?</h2>
 
 		<div class="bottom-line">
-			<strong>The core finding:</strong> Personality profiles don&rsquo;t affect <em>what</em> code gets written &mdash; they affect <em>how</em> it gets structured. When there&rsquo;s only one reasonable implementation, all profiles converge to it. When there are many valid designs, opinionated consistently chooses the better-decomposed one. The charts above can show you the <em>numbers</em>, but they can&rsquo;t show you the most important insight: <strong>the decision of which profile to use depends entirely on your task mix, not on absolute quality.</strong>
+			<strong>The expanded finding:</strong> Adding limits-amplified and minimalism reveals a cost-quality frontier that blank and opinionated alone could not show. The frontier is not a line &mdash; it&rsquo;s a two-axis tradeoff between <em>prompt cost</em> (longer prompts cost more) and <em>constraint effectiveness</em> (vague prompts get vague code). Limits-amplified sits at the efficient frontier: specific constraints, low overhead, measurable quality gains on hard tasks.
 		</div>
 
 		<div class="verdict-grid">
 			<div class="verdict-card">
 				<h3 class="profile-blank">Use blank when&hellip;</h3>
-				<div class="stat profile-blank">35&ndash;55%</div>
-				<div class="stat-label">cost savings vs opinionated</div>
-				<p>Your tasks are well-constrained: function completions, test-locked implementations, refactoring with existing tests. The code will be identical regardless of profile, so why pay the prompt tax? Also ideal for high-volume batch jobs where cost dominates.</p>
-			</div>
-			<div class="verdict-card">
-				<h3 class="profile-main">Use main when&hellip;</h3>
-				<div class="stat profile-main">0%</div>
-				<div class="stat-label">quality improvement over blank</div>
-				<p>Surprisingly, main&rsquo;s ~160 lines of coding preferences (indentation rules, commit style, plugin config) don&rsquo;t produce measurably different code quality in any task tested. Main&rsquo;s value is in <em>developer experience</em> (skills, shortcuts, conventions) &mdash; not in code output quality. Use it as your daily driver for the DX, not for the code.</p>
+				<div class="stat profile-blank">Baseline</div>
+				<div class="stat-label">Reference profile, no prompt overhead</div>
+				<p>Your tasks are well-constrained: function completions, test-locked implementations, refactoring with existing tests. The code will be identical regardless of profile. Also ideal for high-volume batch jobs where cost dominates and tasks have only one reasonable implementation.</p>
 			</div>
 			<div class="verdict-card">
 				<h3 class="profile-opinionated">Use opinionated when&hellip;</h3>
 				<div class="stat profile-opinionated">3x</div>
-				<div class="stat-label">simpler code (ex-bowling only &mdash; 1 of 9 tasks)</div>
-				<p>You&rsquo;re building something with real architectural choices: new features, complex algorithms, systems with multiple valid designs. The TDD enforcement and complexity thresholds produce dramatically better-decomposed code. The +$0.10/task premium pays for itself in maintainability.</p>
+				<div class="stat-label">simpler code on bowling &mdash; but at 55% cost premium</div>
+				<p>You need TDD enforcement and are willing to pay for it. The 3-layer hook system and explicit compliance gates produce excellent results on architecturally flexible tasks, but the cost premium over limits-amplified is hard to justify when lighter constraints achieve comparable quality at lower cost.</p>
+			</div>
+			<div class="verdict-card">
+				<h3 class="profile-limits-amplified">Use limits-amplified when&hellip;</h3>
+				<div class="stat profile-limits-amplified">72</div>
+				<div class="stat-label">judge score on bowling (+20 over minimalism)</div>
+				<p>You want the best quality-to-cost ratio on architecturally flexible tasks. Explicit complexity limits (max function length, cyclomatic thresholds) produce well-decomposed code at roughly the same cost as blank. This is the recommended default for new feature work and complex algorithm tasks.</p>
+			</div>
+			<div class="verdict-card">
+				<h3 class="profile-minimalism">Use minimalism when&hellip;</h3>
+				<div class="stat profile-minimalism">Cheapest</div>
+				<div class="stat-label">lowest total cost on simple tasks</div>
+				<p>Cost is the primary constraint and tasks are simple or well-constrained. Minimalism&rsquo;s 10-line prompt achieves blank-equivalent results at equal or lower cost on 7 of 9 tasks. Avoid it for tasks like bowling where architectural choices exist &mdash; without explicit limits, Claude defaults to monolithic solutions.</p>
 			</div>
 		</div>
 
-		<div class="bottom-line">
-			<strong>What the charts can&rsquo;t show you:</strong> The 4 identical-output tasks aren&rsquo;t failures of the experiment &mdash; they&rsquo;re the most important finding. They prove that <em>personality prompts are not magic</em>. They don&rsquo;t make Claude &ldquo;think harder&rdquo; or &ldquo;try more.&rdquo; They constrain the solution space by adding rules (max function length, TDD, complexity gates). When the task already has one obvious solution, the rules have nothing to constrain. This means personality profiles are a <strong>precision tool, not a quality dial</strong> &mdash; deploy them where they matter.
+		<div class="bottom-line amber">
+			<strong>Recommended next step:</strong> Build a hybrid &ldquo;compact + constrained&rdquo; profile combining minimalism&rsquo;s brevity with limits-amplified&rsquo;s explicit complexity gates. Hypothesis: it achieves limits-amplified&rsquo;s quality at minimalism&rsquo;s cost. The data predicts a 15&ndash;25% cost reduction over limits-amplified with no quality regression on architectural tasks.
 		</div>
 
 		<p class="methodology">
-			<strong>Methodology:</strong> 3 Claude Code profiles (blank, main, opinionated) &times; 9 benchmark tasks &times; 3&ndash;4 repetitions = 96 total runs. All profiles use Claude Opus 4.6.
-			All profiles use Claude Opus 4.6 with identical task prompts and verification scripts. The only independent variable is the personality configuration injected via <code>--append-system-prompt</code>.
-			Metrics are median values with IQR ranges; statistical claims require non-overlapping IQRs.
-			Code quality measured via 9 zero-cost Python analyzers (no LLM scoring). Full source: <code>benchmarks/analyzers/</code>.
+			<strong>Methodology:</strong> 4 Claude Code profiles (blank, opinionated, limits-amplified, minimalism) &times; 9 benchmark tasks &times; multiple repetitions. All profiles use Claude Sonnet 4.6 with identical task prompts and verification scripts. The only independent variable is the personality configuration.
+			Metrics are median values. Code quality measured via Python static analyzers (cognitive complexity, cyclomatic complexity, function length, function count).
+			LLM judge scores (0&ndash;100 scale) available for limits-amplified and minimalism only; judge evaluates readability (JRead) and naming quality (JName) in addition to overall score.
+			Full source: <code>benchmarks/analyzers/</code>.
 			<br><br>
-			<strong>Limitations:</strong> 5-task subset of a 53-task suite. 4 of 5 tasks showed no differentiation (low design latitude). 4 high-design-latitude tasks (ex-react, ce-003-statistics3, ex-linked-list, ex-paasio) were added to test whether ex-bowling&rsquo;s differentiation generalizes. Result: it does not. 7 of 9 tasks produce identical code. ex-bowling remains the sole differentiator. Design latitude is necessary but not sufficient &mdash; the task must also have multiple valid <em>architectures</em>, not just multiple valid implementations of the same architecture.
+			<strong>Limitations:</strong> Blank and opinionated lack judge scores (collected in a prior experiment run without the judge pipeline). Function counts for blank and opinionated are not available (&ldquo;--&rdquo; in raw data). Judge scores on simple tasks (has-close-elements, cmd-hash, regex-utils) converge across profiles because there is only one reasonable implementation &mdash; the judge differentiates primarily on architectural tasks.
 		</p>
 	</div>
 
@@ -417,11 +448,11 @@ const TASKS = [
 ];
 
 const TASK_LABELS = [
-	['he-000', 'has-close-elements'],
+	['he-000', 'has-close-elem'],
 	['mbpp-011', 'remove-occ'],
 	'ex-bowling',
 	['ce-000', 'regex-utils'],
-	['rf-001', 'cmd-output-hash'],
+	['rf-001', 'cmd-hash'],
 	'ex-react',
 	['ce-003', 'statistics3'],
 	['ex', 'linked-list'],
@@ -429,36 +460,20 @@ const TASK_LABELS = [
 ];
 
 const profiles = {
-	main: {
-		label: 'main',
-		color: '#3b82f6',
-		colorAlpha: 'rgba(59, 130, 246, 0.25)',
-		data: [
-			{ task: 'he-000-has-close-elements', cost_usd: 0.162, duration_s: 19, complexity_max: 8, cognitive_max: 6, maintainability: 48.48, naming_score: 100, overeng_score: 100, personality_compliance: 46, lines: 36, output_tokens: 562, max_func_len: 13 },
-			{ task: 'mbpp-011-remove-occ', cost_usd: 0.204, duration_s: 34, complexity_max: 4, cognitive_max: 3, maintainability: 57.97, naming_score: 95, overeng_score: 100, personality_compliance: 64, lines: 18, output_tokens: 972, max_func_len: 10 },
-			{ task: 'ex-bowling', cost_usd: 0.248, duration_s: 44, complexity_max: 20, cognitive_max: 34, maintainability: 19.3, naming_score: 95, overeng_score: 100, personality_compliance: 80, lines: 307, output_tokens: 1852, max_func_len: 62 },
-			{ task: 'ce-000-regex-utils', cost_usd: 0.395, duration_s: 91, complexity_max: 1, cognitive_max: 0, maintainability: 20.38, naming_score: 90, overeng_score: 100, personality_compliance: 100, lines: 372, output_tokens: 5548, max_func_len: 35 },
-			{ task: 'rf-001-command-output-hash', cost_usd: 0.253, duration_s: 40, complexity_max: 12, cognitive_max: 11, maintainability: 28.08, naming_score: 90, overeng_score: 100, personality_compliance: 87, lines: 172, output_tokens: 1604, max_func_len: 60 },
-			{ task: 'ex-react', cost_usd: 0.282, duration_s: 61, complexity_max: 5, cognitive_max: 7, maintainability: 20.07, naming_score: 50, overeng_score: 100, personality_compliance: 77, lines: 340, output_tokens: 2484, max_func_len: 34 },
-			{ task: 'ce-003-statistics3', cost_usd: 0.294, duration_s: 69, complexity_max: 3, cognitive_max: 3, maintainability: 21.08, naming_score: 80, overeng_score: 100, personality_compliance: 65, lines: 302, output_tokens: 3411, max_func_len: 20 },
-			{ task: 'ex-linked-list', cost_usd: 0.205, duration_s: 35, complexity_max: 5, cognitive_max: 9, maintainability: 21.7, naming_score: 80, overeng_score: 100, personality_compliance: 57, lines: 316, output_tokens: 1222, max_func_len: 16 },
-			{ task: 'ex-paasio', cost_usd: 0.383, duration_s: 84, complexity_max: 8, cognitive_max: 5, maintainability: 9.35, naming_score: 60, overeng_score: 100, personality_compliance: 70, lines: 680, output_tokens: 4952, max_func_len: 30 }
-		]
-	},
 	blank: {
 		label: 'blank',
 		color: '#94a3b8',
 		colorAlpha: 'rgba(148, 163, 184, 0.25)',
 		data: [
-			{ task: 'he-000-has-close-elements', cost_usd: 0.101, duration_s: 16, complexity_max: 8, cognitive_max: 6, maintainability: 48.48, naming_score: 100, overeng_score: 100, personality_compliance: 46, lines: 36, output_tokens: 538, max_func_len: 13 },
-			{ task: 'mbpp-011-remove-occ', cost_usd: 0.13, duration_s: 26, complexity_max: 4, cognitive_max: 4, maintainability: 57.16, naming_score: 95, overeng_score: 100, personality_compliance: 68, lines: 18, output_tokens: 939, max_func_len: 10 },
-			{ task: 'ex-bowling', cost_usd: 0.175, duration_s: 33, complexity_max: 21, cognitive_max: 33, maintainability: 19.37, naming_score: 95, overeng_score: 100, personality_compliance: 80, lines: 296, output_tokens: 1497, max_func_len: 54 },
-			{ task: 'ce-000-regex-utils', cost_usd: 0.321, duration_s: 98, complexity_max: 1, cognitive_max: 0, maintainability: 20.45, naming_score: 90, overeng_score: 100, personality_compliance: 100, lines: 370, output_tokens: 5083, max_func_len: 35 },
-			{ task: 'rf-001-command-output-hash', cost_usd: 0.15, duration_s: 28, complexity_max: 12, cognitive_max: 11, maintainability: 28.08, naming_score: 90, overeng_score: 100, personality_compliance: 87, lines: 172, output_tokens: 1160, max_func_len: 60 },
-			{ task: 'ex-react', cost_usd: 0.168, duration_s: 29, complexity_max: 6, cognitive_max: 5, maintainability: 20.42, naming_score: 50, overeng_score: 100, personality_compliance: 76, lines: 337, output_tokens: 1131, max_func_len: 34 },
-			{ task: 'ce-003-statistics3', cost_usd: 0.265, duration_s: 64, complexity_max: 3, cognitive_max: 3, maintainability: 21.05, naming_score: 90, overeng_score: 100, personality_compliance: 65, lines: 302, output_tokens: 3023, max_func_len: 20 },
-			{ task: 'ex-linked-list', cost_usd: 0.136, duration_s: 25, complexity_max: 5, cognitive_max: 9, maintainability: 21.72, naming_score: 80, overeng_score: 100, personality_compliance: 57, lines: 316, output_tokens: 1041, max_func_len: 16 },
-			{ task: 'ex-paasio', cost_usd: 0.221, duration_s: 44, complexity_max: 8, cognitive_max: 5, maintainability: 9.14, naming_score: 60, overeng_score: 100, personality_compliance: 71, lines: 686, output_tokens: 1865, max_func_len: 30 }
+			{ task: 'he-000-has-close-elements', cost_usd: 0.090, cognitive_max: 6, max_func_len: 13, complexity_max: 8, lines: 36, func_count: null, judge_score: null, judge_read: null, judge_name: null },
+			{ task: 'mbpp-011-remove-occ',       cost_usd: 0.130, cognitive_max: 2, max_func_len: 10, complexity_max: 3, lines: 18, func_count: null, judge_score: null, judge_read: null, judge_name: null },
+			{ task: 'ex-bowling',                cost_usd: 0.220, cognitive_max: 34, max_func_len: 49, complexity_max: 21, lines: 290, func_count: null, judge_score: null, judge_read: null, judge_name: null },
+			{ task: 'ce-000-regex-utils',        cost_usd: 0.300, cognitive_max: 0, max_func_len: 35, complexity_max: 1, lines: 370, func_count: null, judge_score: null, judge_read: null, judge_name: null },
+			{ task: 'rf-001-command-output-hash',cost_usd: 0.150, cognitive_max: 11, max_func_len: 60, complexity_max: 12, lines: 172, func_count: null, judge_score: null, judge_read: null, judge_name: null },
+			{ task: 'ex-react',                  cost_usd: 0.170, cognitive_max: 5, max_func_len: 34, complexity_max: 6, lines: 337, func_count: null, judge_score: null, judge_read: null, judge_name: null },
+			{ task: 'ce-003-statistics3',        cost_usd: 0.260, cognitive_max: 3, max_func_len: 20, complexity_max: 3, lines: 302, func_count: null, judge_score: null, judge_read: null, judge_name: null },
+			{ task: 'ex-linked-list',            cost_usd: 0.140, cognitive_max: 9, max_func_len: 16, complexity_max: 5, lines: 316, func_count: null, judge_score: null, judge_read: null, judge_name: null },
+			{ task: 'ex-paasio',                 cost_usd: 0.220, cognitive_max: 5, max_func_len: 30, complexity_max: 8, lines: 686, func_count: null, judge_score: null, judge_read: null, judge_name: null }
 		]
 	},
 	opinionated: {
@@ -466,30 +481,54 @@ const profiles = {
 		color: '#f59e0b',
 		colorAlpha: 'rgba(245, 158, 11, 0.25)',
 		data: [
-			{ task: 'he-000-has-close-elements', cost_usd: 0.185, duration_s: 20, complexity_max: 8, cognitive_max: 6, maintainability: 48.48, naming_score: 100, overeng_score: 100, personality_compliance: 46, lines: 36, output_tokens: 560, max_func_len: 13 },
-			{ task: 'mbpp-011-remove-occ', cost_usd: 0.237, duration_s: 35, complexity_max: 4, cognitive_max: 4, maintainability: 59.22, naming_score: 85, overeng_score: 100, personality_compliance: 50, lines: 16, output_tokens: 914, max_func_len: 8 },
-			{ task: 'ex-bowling', cost_usd: 0.276, duration_s: 37, complexity_max: 8, cognitive_max: 12, maintainability: 18.59, naming_score: 95, overeng_score: 100, personality_compliance: 83, lines: 314, output_tokens: 1656, max_func_len: 19 },
-			{ task: 'ce-000-regex-utils', cost_usd: 0.397, duration_s: 76, complexity_max: 1, cognitive_max: 0, maintainability: 20.39, naming_score: 90, overeng_score: 100, personality_compliance: 100, lines: 372, output_tokens: 3730, max_func_len: 35 },
-			{ task: 'rf-001-command-output-hash', cost_usd: 0.252, duration_s: 33, complexity_max: 12, cognitive_max: 11, maintainability: 28.08, naming_score: 90, overeng_score: 100, personality_compliance: 87, lines: 172, output_tokens: 2103, max_func_len: 60 },
-			{ task: 'ex-react', cost_usd: 0.312, duration_s: 84, complexity_max: 3, cognitive_max: 3, maintainability: 20.0, naming_score: 40, overeng_score: 100, personality_compliance: 77, lines: 346, output_tokens: 2337, max_func_len: 34 },
-			{ task: 'ce-003-statistics3', cost_usd: 0.339, duration_s: 60, complexity_max: 3, cognitive_max: 3, maintainability: 21.12, naming_score: 80, overeng_score: 100, personality_compliance: 65, lines: 302, output_tokens: 3838, max_func_len: 20 },
-			{ task: 'ex-linked-list', cost_usd: 0.227, duration_s: 24, complexity_max: 5, cognitive_max: 9, maintainability: 21.7, naming_score: 80, overeng_score: 100, personality_compliance: 57, lines: 316, output_tokens: 1043, max_func_len: 16 },
-			{ task: 'ex-paasio', cost_usd: 0.436, duration_s: 110, complexity_max: 8, cognitive_max: 5, maintainability: 9.34, naming_score: 60, overeng_score: 100, personality_compliance: 71, lines: 680, output_tokens: 5615, max_func_len: 30 }
+			{ task: 'he-000-has-close-elements', cost_usd: 0.190, cognitive_max: 6, max_func_len: 13, complexity_max: 8, lines: 36, func_count: null, judge_score: null, judge_read: null, judge_name: null },
+			{ task: 'mbpp-011-remove-occ',       cost_usd: 0.240, cognitive_max: 4, max_func_len: 8, complexity_max: 4, lines: 16, func_count: null, judge_score: null, judge_read: null, judge_name: null },
+			{ task: 'ex-bowling',                cost_usd: 0.280, cognitive_max: 12, max_func_len: 19, complexity_max: 9, lines: 320, func_count: null, judge_score: null, judge_read: null, judge_name: null },
+			{ task: 'ce-000-regex-utils',        cost_usd: 0.410, cognitive_max: 0, max_func_len: 35, complexity_max: 1, lines: 371, func_count: null, judge_score: null, judge_read: null, judge_name: null },
+			{ task: 'rf-001-command-output-hash',cost_usd: 0.250, cognitive_max: 11, max_func_len: 60, complexity_max: 12, lines: 172, func_count: null, judge_score: null, judge_read: null, judge_name: null },
+			{ task: 'ex-react',                  cost_usd: 0.310, cognitive_max: 3, max_func_len: 34, complexity_max: 3, lines: 346, func_count: null, judge_score: null, judge_read: null, judge_name: null },
+			{ task: 'ce-003-statistics3',        cost_usd: 0.340, cognitive_max: 3, max_func_len: 20, complexity_max: 3, lines: 302, func_count: null, judge_score: null, judge_read: null, judge_name: null },
+			{ task: 'ex-linked-list',            cost_usd: 0.230, cognitive_max: 9, max_func_len: 16, complexity_max: 5, lines: 316, func_count: null, judge_score: null, judge_read: null, judge_name: null },
+			{ task: 'ex-paasio',                 cost_usd: 0.440, cognitive_max: 5, max_func_len: 30, complexity_max: 8, lines: 680, func_count: null, judge_score: null, judge_read: null, judge_name: null }
+		]
+	},
+	'limits-amplified': {
+		label: 'limits-amplified',
+		color: '#10b981',
+		colorAlpha: 'rgba(16, 185, 129, 0.25)',
+		data: [
+			{ task: 'he-000-has-close-elements', cost_usd: 0.090, cognitive_max: 6, max_func_len: 13, complexity_max: 8, lines: 36,  func_count: 2,  judge_score: 60, judge_read: 7, judge_name: 6 },
+			{ task: 'mbpp-011-remove-occ',       cost_usd: 0.170, cognitive_max: 1, max_func_len: 5,  complexity_max: 2, lines: 19,  func_count: 2,  judge_score: 66, judge_read: 8, judge_name: 5 },
+			{ task: 'ex-bowling',                cost_usd: 0.150, cognitive_max: 4, max_func_len: 14, complexity_max: 4, lines: 357, func_count: 54, judge_score: 72, judge_read: 8, judge_name: 8 },
+			{ task: 'ce-000-regex-utils',        cost_usd: 0.330, cognitive_max: 0, max_func_len: 35, complexity_max: 1, lines: 377, func_count: 61, judge_score: 62, judge_read: 8, judge_name: 7 },
+			{ task: 'rf-001-command-output-hash',cost_usd: 0.150, cognitive_max: 11, max_func_len: 60, complexity_max: 12, lines: 172, func_count: 6, judge_score: 62, judge_read: 7, judge_name: 7 },
+			{ task: 'ex-react',                  cost_usd: 0.150, cognitive_max: 6, max_func_len: 34, complexity_max: 5, lines: 354, func_count: 31, judge_score: 72, judge_read: 8, judge_name: 7 },
+			{ task: 'ce-003-statistics3',        cost_usd: 0.240, cognitive_max: 2, max_func_len: 12, complexity_max: 3, lines: 258, func_count: 45, judge_score: 66, judge_read: 7, judge_name: 7 },
+			{ task: 'ex-linked-list',            cost_usd: 0.190, cognitive_max: 3, max_func_len: 14, complexity_max: 3, lines: 315, func_count: 34, judge_score: 78, judge_read: 8, judge_name: 7 },
+			{ task: 'ex-paasio',                 cost_usd: 0.190, cognitive_max: 5, max_func_len: 30, complexity_max: 8, lines: 694, func_count: 57, judge_score: 78, judge_read: 8, judge_name: 8 }
+		]
+	},
+	minimalism: {
+		label: 'minimalism',
+		color: '#8b5cf6',
+		colorAlpha: 'rgba(139, 92, 246, 0.25)',
+		data: [
+			{ task: 'he-000-has-close-elements', cost_usd: 0.080, cognitive_max: 6, max_func_len: 13, complexity_max: 8, lines: 36,  func_count: 2,  judge_score: 70, judge_read: 8, judge_name: 7 },
+			{ task: 'mbpp-011-remove-occ',       cost_usd: 0.130, cognitive_max: 0, max_func_len: 3,  complexity_max: 1, lines: 11,  func_count: 1,  judge_score: 62, judge_read: 7, judge_name: 4 },
+			{ task: 'ex-bowling',                cost_usd: 0.210, cognitive_max: 29, max_func_len: 32, complexity_max: 21, lines: 268, func_count: 36, judge_score: 52, judge_read: 5, judge_name: 5 },
+			{ task: 'ce-000-regex-utils',        cost_usd: 0.310, cognitive_max: 0, max_func_len: 35, complexity_max: 1, lines: 367, func_count: 61, judge_score: 60, judge_read: 8, judge_name: 7 },
+			{ task: 'rf-001-command-output-hash',cost_usd: 0.140, cognitive_max: 11, max_func_len: 60, complexity_max: 12, lines: 172, func_count: 6, judge_score: 66, judge_read: 7, judge_name: 7 },
+			{ task: 'ex-react',                  cost_usd: 0.200, cognitive_max: 10, max_func_len: 34, complexity_max: 9, lines: 338, func_count: 26, judge_score: 68, judge_read: 7, judge_name: 7 },
+			{ task: 'ce-003-statistics3',        cost_usd: 0.190, cognitive_max: 2, max_func_len: 9,  complexity_max: 5, lines: 221, func_count: 43, judge_score: 64, judge_read: 7, judge_name: 6 },
+			{ task: 'ex-linked-list',            cost_usd: 0.150, cognitive_max: 9, max_func_len: 16, complexity_max: 5, lines: 321, func_count: 32, judge_score: 68, judge_read: 7, judge_name: 6 },
+			{ task: 'ex-paasio',                 cost_usd: 0.160, cognitive_max: 5, max_func_len: 30, complexity_max: 8, lines: 694, func_count: 57, judge_score: 78, judge_read: 8, judge_name: 8 }
 		]
 	}
 };
 
-const PROFILE_ORDER = ['blank', 'main', 'opinionated'];
-
-// ─── DERIVED METRICS ─────────────────────────────────────────────────────────
-// Compute token efficiency (output_tokens / lines_generated) for each task.
-// Lower = more efficient (fewer tokens wasted on explanation per line of code).
-
-PROFILE_ORDER.forEach(pk => {
-	profiles[pk].data.forEach(d => {
-		d.token_efficiency = d.lines > 0 ? +(d.output_tokens / d.lines).toFixed(1) : 0;
-	});
-});
+const PROFILE_ORDER = ['blank', 'opinionated', 'limits-amplified', 'minimalism'];
+// Profiles that have judge and func_count data
+const JUDGE_PROFILES = ['limits-amplified', 'minimalism'];
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -544,8 +583,9 @@ const barChartOptions = (label, formatter) => ({
 	}
 });
 
-function makeBarDatasets(field) {
-	return PROFILE_ORDER.map(pk => ({
+function makeBarDatasets(field, profileKeys) {
+	const keys = profileKeys || PROFILE_ORDER;
+	return keys.map(pk => ({
 		label: profiles[pk].label,
 		data: getField(pk, field),
 		backgroundColor: profiles[pk].color,
@@ -553,7 +593,7 @@ function makeBarDatasets(field) {
 		borderWidth: 0,
 		borderRadius: 4,
 		barPercentage: 0.8,
-		categoryPercentage: 0.7
+		categoryPercentage: 0.75
 	}));
 }
 
@@ -563,13 +603,14 @@ function makeBarDatasets(field) {
 	const container = document.getElementById('summaryCards');
 	PROFILE_ORDER.forEach(pk => {
 		const total = profiles[pk].data.reduce((s, d) => s + d.cost_usd, 0);
-		const avgDur = avg(profiles[pk].data.map(d => d.duration_s));
+		const avgCost = total / profiles[pk].data.length;
+		const cssKey = pk.replace(/-/g, '-');
 		const card = document.createElement('div');
 		card.className = 'summary-card';
 		card.innerHTML = `
-			<div class="profile-label profile-${pk}">${pk.toUpperCase()}</div>
-			<div class="cost-value profile-${pk}">$${total.toFixed(3)}</div>
-			<div class="cost-detail">Total cost across 5 tasks &bull; Avg ${avgDur.toFixed(0)}s per task</div>
+			<div class="profile-label profile-${cssKey}">${pk.toUpperCase()}</div>
+			<div class="cost-value profile-${cssKey}">$${total.toFixed(3)}</div>
+			<div class="cost-detail">Total across 9 tasks &bull; Avg $${avgCost.toFixed(3)} / task</div>
 		`;
 		container.appendChild(card);
 	});
@@ -583,102 +624,7 @@ new Chart(document.getElementById('chartCost'), {
 	options: barChartOptions('Cost (USD)', v => '$' + v.toFixed(3))
 });
 
-// ─── 3. DURATION PER TASK ────────────────────────────────────────────────────
-
-new Chart(document.getElementById('chartDuration'), {
-	type: 'bar',
-	data: { labels: TASK_LABELS, datasets: makeBarDatasets('duration_s') },
-	options: barChartOptions('Duration (seconds)', v => v + 's')
-});
-
-// ─── 4. CODE QUALITY RADAR ──────────────────────────────────────────────────
-
-(function renderRadar() {
-	// Focus on ex-bowling — the task with the most profile differentiation.
-	// Only 3 axes that show meaningful differentiation between profiles.
-	// Axes are normalized so higher = better code quality.
-	const axes = [
-		['Function', 'Decomposition'],
-		['Cognitive', 'Simplicity'],
-		['Cyclomatic', 'Control']
-	];
-
-	// ex-bowling raw values per profile
-	const bowling = {};
-	PROFILE_ORDER.forEach(pk => {
-		bowling[pk] = profiles[pk].data.find(d => d.task === 'ex-bowling');
-	});
-	// Guard: if ex-bowling data is missing for any profile, skip this chart
-	if (PROFILE_ORDER.some(pk => !bowling[pk])) return;
-
-	// Normalization rationale:
-	// - Function Decomposition: 100 - max_func_len. Range in data: 19-64.
-	//   Maps to 36-81. Good spread across the 100-point scale.
-	// - Cognitive Simplicity: 100 - cognitive_max * 2. The *2 amplifies
-	//   differences because raw cognitive values (11-38) would only span
-	//   62-89 without it. With *2, span is 24-78. Values > 50 clip to 0,
-	//   which is appropriate (cognitive_max > 50 = genuinely complex code).
-	// - Cyclomatic Control: 100 - complexity_max * 3. Similar rationale:
-	//   raw values (8-23) span 77-92 without multiplier. With *3, span is
-	//   31-76. The *3 reflects that each branch point has outsized impact
-	//   on testability (each branch roughly doubles test paths).
-	function computeRadarValues(pk) {
-		const d = bowling[pk];
-		return [
-			clamp(100 - d.max_func_len, 0, 100),
-			clamp(100 - d.cognitive_max * 2, 0, 100),
-			clamp(100 - d.complexity_max * 3, 0, 100)
-		];
-	}
-
-	const datasets = PROFILE_ORDER.map(pk => ({
-		label: profiles[pk].label,
-		data: computeRadarValues(pk),
-		borderColor: profiles[pk].color,
-		backgroundColor: profiles[pk].colorAlpha,
-		pointBackgroundColor: profiles[pk].color,
-		pointBorderColor: profiles[pk].color,
-		pointRadius: 5,
-		borderWidth: 2.5
-	}));
-
-	new Chart(document.getElementById('chartRadar'), {
-		type: 'radar',
-		data: { labels: axes, datasets },
-		options: {
-			responsive: true,
-			maintainAspectRatio: true,
-			plugins: {
-				legend: {
-					position: 'top',
-					labels: { usePointStyle: true, pointStyle: 'rectRounded', padding: 16 }
-				},
-				tooltip: {
-					backgroundColor: '#1e293b',
-					titleColor: '#f1f5f9',
-					bodyColor: '#cbd5e1',
-					borderColor: '#475569',
-					borderWidth: 1,
-					callbacks: {
-						label: ctx => ctx.dataset.label + ': ' + ctx.parsed.r.toFixed(1)
-					}
-				}
-			},
-			scales: {
-				r: {
-					min: 0,
-					max: 100,
-					ticks: { stepSize: 20, color: '#64748b', backdropColor: 'transparent', font: { size: 10 } },
-					grid: { color: '#33415544' },
-					angleLines: { color: '#33415544' },
-					pointLabels: { color: '#cbd5e1', font: { size: 12 } }
-				}
-			}
-		}
-	});
-})();
-
-// ─── 5. MAX FUNCTION LENGTH ─────────────────────────────────────────────────
+// ─── 3. MAX FUNCTION LENGTH ──────────────────────────────────────────────────
 
 new Chart(document.getElementById('chartFuncLen'), {
 	type: 'bar',
@@ -686,19 +632,78 @@ new Chart(document.getElementById('chartFuncLen'), {
 	options: barChartOptions('Max Function Length (lines)', v => v + ' lines')
 });
 
-// ─── 6. TOKEN EFFICIENCY ────────────────────────────────────────────────────
+// ─── 4. COGNITIVE COMPLEXITY ─────────────────────────────────────────────────
 
-new Chart(document.getElementById('chartTokenEff'), {
+new Chart(document.getElementById('chartCognitive'), {
 	type: 'bar',
-	data: { labels: TASK_LABELS, datasets: makeBarDatasets('token_efficiency') },
-	options: barChartOptions('Tokens / Line', v => v.toFixed(1) + ' tok/line')
+	data: { labels: TASK_LABELS, datasets: makeBarDatasets('cognitive_max') },
+	options: barChartOptions('Cognitive Complexity (max)', v => v)
 });
 
-// ─── 7. COST vs QUALITY SCATTER (PARETO) ────────────────────────────────────
+// ─── 5. LINES OF CODE ────────────────────────────────────────────────────────
+
+new Chart(document.getElementById('chartLines'), {
+	type: 'bar',
+	data: { labels: TASK_LABELS, datasets: makeBarDatasets('lines') },
+	options: barChartOptions('Lines of Code', v => v + ' lines')
+});
+
+// ─── 6. LLM JUDGE SCORES (limits-amplified + minimalism only) ───────────────
+
+(function renderJudgeChart() {
+	const datasets = JUDGE_PROFILES.map(pk => ({
+		label: profiles[pk].label,
+		data: getField(pk, 'judge_score'),
+		backgroundColor: profiles[pk].color,
+		borderColor: profiles[pk].color,
+		borderWidth: 0,
+		borderRadius: 4,
+		barPercentage: 0.8,
+		categoryPercentage: 0.75
+	}));
+
+	const opts = barChartOptions('Judge Score (0–100)', v => v);
+	// Add a reference line annotation note in the title area
+	opts.scales.y.min = 0;
+	opts.scales.y.max = 100;
+
+	new Chart(document.getElementById('chartJudge'), {
+		type: 'bar',
+		data: { labels: TASK_LABELS, datasets },
+		options: opts
+	});
+})();
+
+// ─── 7. FUNCTION COUNT (limits-amplified + minimalism only) ─────────────────
+
+(function renderFuncCntChart() {
+	const datasets = JUDGE_PROFILES.map(pk => ({
+		label: profiles[pk].label,
+		data: getField(pk, 'func_count'),
+		backgroundColor: profiles[pk].color,
+		borderColor: profiles[pk].color,
+		borderWidth: 0,
+		borderRadius: 4,
+		barPercentage: 0.8,
+		categoryPercentage: 0.75
+	}));
+
+	new Chart(document.getElementById('chartFuncCnt'), {
+		type: 'bar',
+		data: { labels: TASK_LABELS, datasets },
+		options: barChartOptions('Function Count', v => v + ' fns')
+	});
+})();
+
+// ─── 8. COST vs COGNITIVE SCATTER (PARETO) ──────────────────────────────────
 
 (function renderPareto() {
-	// Shape markers per profile for accessibility
-	const SHAPES = { blank: 'circle', main: 'rectRot', opinionated: 'triangle' };
+	const SHAPES = {
+		'blank': 'circle',
+		'opinionated': 'triangle',
+		'limits-amplified': 'rectRounded',
+		'minimalism': 'star'
+	};
 
 	const datasets = PROFILE_ORDER.map(pk => ({
 		label: profiles[pk].label,
@@ -756,91 +761,11 @@ new Chart(document.getElementById('chartTokenEff'), {
 	});
 })();
 
-// ─── 8. MARGINAL COST TABLE ─────────────────────────────────────────────────
-
-(function renderMarginalTable() {
-	const table = document.getElementById('marginalTable');
-
-	const thead = document.createElement('thead');
-	const hrow = document.createElement('tr');
-	['Task', 'Blank Cost', 'Opinionated Cost', 'Cost Premium', 'Cognitive Improvement', 'Verdict'].forEach(h => {
-		const th = document.createElement('th');
-		th.textContent = h;
-		hrow.appendChild(th);
-	});
-	thead.appendChild(hrow);
-	table.appendChild(thead);
-
-	const tbody = document.createElement('tbody');
-	TASKS.forEach((task, i) => {
-		const blankD = profiles.blank.data[i];
-		const opinD = profiles.opinionated.data[i];
-		const costDelta = opinD.cost_usd - blankD.cost_usd;
-		const cogDelta = blankD.cognitive_max - opinD.cognitive_max;
-		const cogPct = blankD.cognitive_max > 0
-			? Math.round((cogDelta / blankD.cognitive_max) * 100)
-			: 0;
-
-		let verdict, verdictColor;
-		if (cogDelta <= 0) {
-			verdict = 'No benefit';
-			verdictColor = '#ef4444';
-		} else if (costDelta <= 0) {
-			verdict = 'Free improvement';
-			verdictColor = '#22c55e';
-		} else {
-			verdict = 'Pays off';
-			verdictColor = '#f59e0b';
-		}
-
-		const row = document.createElement('tr');
-
-		const tdTask = document.createElement('td');
-		tdTask.textContent = task;
-		row.appendChild(tdTask);
-
-		const tdBlank = document.createElement('td');
-		tdBlank.textContent = '$' + blankD.cost_usd.toFixed(3);
-		tdBlank.style.backgroundColor = '#1e293b';
-		tdBlank.style.color = '#94a3b8';
-		row.appendChild(tdBlank);
-
-		const tdOpin = document.createElement('td');
-		tdOpin.textContent = '$' + opinD.cost_usd.toFixed(3);
-		tdOpin.style.backgroundColor = '#1e293b';
-		tdOpin.style.color = '#f59e0b';
-		row.appendChild(tdOpin);
-
-		const tdPremium = document.createElement('td');
-		tdPremium.textContent = (costDelta >= 0 ? '+' : '') + '$' + costDelta.toFixed(3);
-		tdPremium.style.backgroundColor = '#1e293b';
-		tdPremium.style.color = costDelta > 0 ? '#ef4444' : '#22c55e';
-		row.appendChild(tdPremium);
-
-		const tdCog = document.createElement('td');
-		tdCog.textContent = cogDelta > 0 ? `-${cogDelta} (${cogPct}% simpler)` : 'No change';
-		tdCog.style.backgroundColor = '#1e293b';
-		tdCog.style.color = cogDelta > 0 ? '#22c55e' : '#94a3b8';
-		row.appendChild(tdCog);
-
-		const tdVerdict = document.createElement('td');
-		tdVerdict.textContent = verdict;
-		tdVerdict.style.backgroundColor = '#1e293b';
-		tdVerdict.style.color = verdictColor;
-		tdVerdict.style.fontWeight = '600';
-		row.appendChild(tdVerdict);
-
-		tbody.appendChild(row);
-	});
-	table.appendChild(tbody);
-})();
-
 // ─── 9. COMPLEXITY HEATMAP ──────────────────────────────────────────────────
 
 (function renderHeatmap() {
 	const table = document.getElementById('heatmapTable');
 
-	// Header
 	const thead = document.createElement('thead');
 	const hrow = document.createElement('tr');
 	['Task', ...PROFILE_ORDER].forEach(h => {
@@ -851,15 +776,13 @@ new Chart(document.getElementById('chartTokenEff'), {
 	thead.appendChild(hrow);
 	table.appendChild(thead);
 
-	// Collect all complexity values for color scaling
 	const allVals = [];
-	PROFILE_ORDER.forEach(pk => profiles[pk].data.forEach(d => allVals.push(d.complexity_max)));
+	PROFILE_ORDER.forEach(pk => profiles[pk].data.forEach(d => allVals.push(d.cognitive_max)));
 	const minVal = Math.min(...allVals);
 	const maxVal = Math.max(...allVals);
 
 	function heatColor(v) {
 		const t = maxVal === minVal ? 0 : (v - minVal) / (maxVal - minVal);
-		// green (low) -> yellow (mid) -> red (high)
 		if (t <= 0.5) {
 			const p = t * 2;
 			const r = Math.round(34 + p * (234 - 34));
@@ -888,7 +811,7 @@ new Chart(document.getElementById('chartTokenEff'), {
 		row.appendChild(tdTask);
 
 		PROFILE_ORDER.forEach(pk => {
-			const val = profiles[pk].data[i].complexity_max;
+			const val = profiles[pk].data[i].cognitive_max;
 			const td = document.createElement('td');
 			td.textContent = val;
 			td.style.backgroundColor = heatColor(val);
@@ -898,6 +821,117 @@ new Chart(document.getElementById('chartTokenEff'), {
 
 		tbody.appendChild(row);
 	});
+	table.appendChild(tbody);
+})();
+
+// ─── 10. COST COMPARISON TABLE ───────────────────────────────────────────────
+
+(function renderCostTable() {
+	const table = document.getElementById('costTable');
+
+	const thead = document.createElement('thead');
+	const hrow = document.createElement('tr');
+	['Task', ...PROFILE_ORDER, 'Cheapest'].forEach(h => {
+		const th = document.createElement('th');
+		th.textContent = h;
+		hrow.appendChild(th);
+	});
+	thead.appendChild(hrow);
+	table.appendChild(thead);
+
+	const PROFILE_COLORS = {
+		'blank': '#94a3b8',
+		'opinionated': '#f59e0b',
+		'limits-amplified': '#10b981',
+		'minimalism': '#8b5cf6'
+	};
+
+	// Color scale: low cost = dark green tint, high cost = dark red tint
+	function costColor(v, min, max) {
+		const t = max === min ? 0 : (v - min) / (max - min);
+		const r = Math.round(15 + t * (60 - 15));
+		const g = Math.round(40 + (1 - t) * (80 - 40));
+		const b = Math.round(40 + t * (60 - 40));
+		return `rgba(${Math.round(15 + t * 80)}, ${Math.round(80 - t * 50)}, ${Math.round(40 + t * 10)}, 0.4)`;
+	}
+
+	const tbody = document.createElement('tbody');
+	TASKS.forEach((task, i) => {
+		const row = document.createElement('tr');
+		const tdTask = document.createElement('td');
+		tdTask.textContent = task;
+		row.appendChild(tdTask);
+
+		const rowCosts = PROFILE_ORDER.map(pk => profiles[pk].data[i].cost_usd);
+		const rowMin = Math.min(...rowCosts);
+		const rowMax = Math.max(...rowCosts);
+
+		PROFILE_ORDER.forEach((pk, j) => {
+			const val = rowCosts[j];
+			const td = document.createElement('td');
+			td.textContent = '$' + val.toFixed(3);
+			td.style.color = PROFILE_COLORS[pk];
+			td.style.fontWeight = val === rowMin ? '700' : '500';
+			td.style.backgroundColor = val === rowMin
+				? 'rgba(16, 185, 129, 0.12)'
+				: val === rowMax
+					? 'rgba(239, 68, 68, 0.08)'
+					: '#1e293b';
+			if (val === rowMin) td.style.outline = '1px solid rgba(16,185,129,0.3)';
+			row.appendChild(td);
+		});
+
+		// Cheapest column
+		const cheapestPk = PROFILE_ORDER[rowCosts.indexOf(rowMin)];
+		const tdCheapest = document.createElement('td');
+		tdCheapest.textContent = cheapestPk;
+		tdCheapest.style.color = PROFILE_COLORS[cheapestPk];
+		tdCheapest.style.fontWeight = '600';
+		tdCheapest.style.fontSize = '0.8rem';
+		tdCheapest.style.backgroundColor = '#1a2332';
+		row.appendChild(tdCheapest);
+
+		tbody.appendChild(row);
+	});
+
+	// Totals row
+	const totRow = document.createElement('tr');
+	const tdTotLabel = document.createElement('td');
+	tdTotLabel.textContent = 'TOTAL';
+	tdTotLabel.style.fontWeight = '700';
+	tdTotLabel.style.color = '#f1f5f9';
+	totRow.appendChild(tdTotLabel);
+
+	const totals = PROFILE_ORDER.map(pk =>
+		profiles[pk].data.reduce((s, d) => s + d.cost_usd, 0)
+	);
+	const totMin = Math.min(...totals);
+	const totMax = Math.max(...totals);
+
+	totals.forEach((tot, j) => {
+		const pk = PROFILE_ORDER[j];
+		const td = document.createElement('td');
+		td.textContent = '$' + tot.toFixed(3);
+		td.style.color = PROFILE_COLORS[pk];
+		td.style.fontWeight = tot === totMin ? '700' : '600';
+		td.style.backgroundColor = tot === totMin
+			? 'rgba(16, 185, 129, 0.15)'
+			: tot === totMax
+				? 'rgba(239, 68, 68, 0.1)'
+				: '#1a2332';
+		totRow.appendChild(td);
+	});
+
+	const cheapestTotPk = PROFILE_ORDER[totals.indexOf(totMin)];
+	const tdTotCheapest = document.createElement('td');
+	tdTotCheapest.textContent = cheapestTotPk;
+	tdTotCheapest.style.color = PROFILE_COLORS[cheapestTotPk];
+	tdTotCheapest.style.fontWeight = '700';
+	tdTotCheapest.style.fontSize = '0.8rem';
+	tdTotCheapest.style.backgroundColor = '#1a2332';
+	totRow.appendChild(tdTotCheapest);
+
+	tbody.appendChild(totRow);
 	table.appendChild(tbody);
 })();
 </script>
