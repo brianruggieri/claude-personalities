@@ -19,46 +19,78 @@ import sys
 
 
 RUBRIC = """Rate this code on 5 dimensions, each scored 1-10.
+Use the anchored examples to calibrate your scores.
 
-Dimensions:
-1. READABILITY: Is the code easy to understand? Good formatting, logical flow, appropriate comments?
-2. NAMING: Are variable/function/class names descriptive and consistent? Follow language conventions?
-3. ERROR_HANDLING: Does the code handle edge cases, invalid inputs, and errors appropriately?
-4. IDIOMATIC: Does the code follow language idioms and best practices? Uses standard patterns?
-5. ABSTRACTION: Is the level of abstraction appropriate? Not over-engineered, not under-abstracted?
+1. READABILITY: Is the code easy to understand?
+   3 = Dense logic, unclear variable flow, no whitespace grouping
+   5 = Functional but takes effort to follow
+   7 = Clear flow, good whitespace, could improve naming in spots
+   9 = Immediately understandable, self-documenting structure
+
+2. NAMING: Are names descriptive and consistent?
+   3 = Generic names (data, result, temp), inconsistent conventions
+   5 = Adequate names, mostly consistent
+   7 = Descriptive names, consistent conventions, minor abbreviations
+   9 = Every name reveals intent, perfect convention adherence
+
+3. ERROR_HANDLING: Does the code handle edge cases and errors?
+   3 = No edge case handling, bare except blocks, silent failures
+   5 = Some handling, but gaps in coverage
+   7 = Key edge cases handled, specific exceptions, some gaps
+   9 = All edge cases handled, custom exceptions where appropriate
+
+4. IDIOMATIC: Does the code follow language idioms and best practices?
+   3 = Transliterated from another language, ignores standard library
+   5 = Basic usage, misses some language features
+   7 = Uses language features correctly, follows most conventions
+   9 = Expert-level idioms, leverages stdlib perfectly, zero anti-patterns
+
+5. ABSTRACTION: Is the level of abstraction appropriate for the problem?
+   3 = God function or premature abstraction, wrong level of granularity
+   5 = Works but decomposition could be better
+   7 = Reasonable decomposition, could be slightly better
+   9 = Perfect granularity for the problem, each unit has one clear purpose
 
 Respond ONLY with a JSON object, no other text:
 {"readability": N, "naming": N, "error_handling": N, "idiomatic": N, "abstraction": N}
-
-Here is the code to evaluate:
 """
 
 
 def collect_code(workdir):
 	"""Collect all generated code files into a single string."""
 	code_parts = []
-	for fname in sorted(os.listdir(workdir)):
-		if fname.startswith(('.', '_')):
-			continue
-		filepath = os.path.join(workdir, fname)
-		if not os.path.isfile(filepath):
-			continue
-		_, ext = os.path.splitext(fname)
-		if ext not in ('.py', '.js', '.jsx', '.ts', '.tsx', '.md'):
-			continue
-		try:
-			with open(filepath) as f:
-				content = f.read()
-			if content.strip():
-				code_parts.append(f"--- {fname} ---\n{content}")
-		except OSError:
-			pass
+	for root, dirs, files in os.walk(workdir):
+		dirs[:] = [d for d in dirs if not d.startswith(('.', '_'))]
+		for fname in sorted(files):
+			if fname.startswith(('.', '_')):
+				continue
+			_, ext = os.path.splitext(fname)
+			if ext not in ('.py', '.js', '.jsx', '.ts', '.tsx', '.md'):
+				continue
+			filepath = os.path.join(root, fname)
+			try:
+				with open(filepath) as f:
+					content = f.read()
+				if content.strip():
+					rel_path = os.path.relpath(filepath, workdir)
+					code_parts.append(f"--- {rel_path} ---\n{content}")
+			except OSError:
+				pass
 	return "\n\n".join(code_parts)
 
 
 try:
 	workdir = sys.argv[1]
 	task_name = sys.argv[2] if len(sys.argv) > 2 else "unknown"
+	task_dir = sys.argv[3] if len(sys.argv) > 3 else None
+
+	# Read task prompt for context
+	task_context = ""
+	if task_dir:
+		prompt_path = os.path.join(task_dir, "prompt.md")
+		if os.path.exists(prompt_path):
+			with open(prompt_path) as f:
+				task_context = f"Task: {task_name}\nPrompt: {f.read().strip()}\n\n"
 
 	code = collect_code(workdir)
 	if not code.strip():
@@ -70,7 +102,7 @@ try:
 		print("JUDGE_ABSTRACTION:5")
 		sys.exit(0)
 
-	prompt = RUBRIC + code
+	prompt = task_context + RUBRIC + code
 
 	result = subprocess.run(
 		['claude', '-p', '--dangerously-skip-permissions', '--output-format', 'json', prompt],

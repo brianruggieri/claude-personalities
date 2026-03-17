@@ -1341,6 +1341,14 @@ _benchmark_run_task() {
 		analyzer_output+="$(python3 "$analyzers_dir/duplicate_blocks.py" "$tmpdir" 2>/dev/null || true)"$'\n'
 		# Personality compliance
 		analyzer_output+="$(python3 "$analyzers_dir/personality_compliance.py" "$tmpdir" "$profile" 2>/dev/null || true)"$'\n'
+		# Function count
+		analyzer_output+="$(python3 "$analyzers_dir/function_count.py" "$tmpdir" 2>/dev/null || true)"$'\n'
+		# Type annotation coverage
+		analyzer_output+="$(python3 "$analyzers_dir/type_annotation_coverage.py" "$tmpdir" 2>/dev/null || true)"$'\n'
+		# Docstring coverage
+		analyzer_output+="$(python3 "$analyzers_dir/docstring_coverage.py" "$tmpdir" 2>/dev/null || true)"$'\n'
+		# Error handling density
+		analyzer_output+="$(python3 "$analyzers_dir/error_handling_density.py" "$tmpdir" 2>/dev/null || true)"$'\n'
 		# Regression check (only for fix-python-bug)
 		if [ "$task_name" = "fix-python-bug" ] && [ -d "$task_dir/fixture" ]; then
 			analyzer_output+="$(python3 "$analyzers_dir/regression_check.py" "$tmpdir" "$task_dir/fixture" 2>/dev/null || true)"$'\n'
@@ -1348,7 +1356,7 @@ _benchmark_run_task() {
 		# LLM-as-judge (uses subscription via claude -p)
 		# Disabled during initial runs to avoid slowdown — enable with BENCHMARK_JUDGE=1
 		if [ "${BENCHMARK_JUDGE:-0}" = "1" ] && command -v claude &>/dev/null; then
-			analyzer_output+="$(python3 "$analyzers_dir/llm_judge.py" "$tmpdir" "$task_name" 2>/dev/null || true)"$'\n'
+			analyzer_output+="$(python3 "$analyzers_dir/llm_judge.py" "$tmpdir" "$task_name" "$task_dir" 2>/dev/null || true)"$'\n'
 		fi
 	fi
 	verify_output="$verify_output"$'\n'"$analyzer_output"
@@ -1468,6 +1476,46 @@ _benchmark_run_task() {
 	personality_violations="$(echo "$verify_output" | grep -oE 'PERSONALITY_VIOLATIONS:[0-9]+' | cut -d: -f2 || true)"
 	[ -z "$personality_violations" ] && personality_violations=0
 
+	local function_count
+	function_count="$(echo "$verify_output" | grep -oE 'FUNCTION_COUNT:[0-9]+' | head -1 | cut -d: -f2 || true)"
+	[ -z "$function_count" ] && function_count=0
+
+	local function_count_avg
+	function_count_avg="$(echo "$verify_output" | grep -oE 'FUNCTION_COUNT_AVG_PER_FILE:[0-9.]+' | cut -d: -f2 || true)"
+	[ -z "$function_count_avg" ] && function_count_avg=0
+
+	local type_annotation_coverage
+	type_annotation_coverage="$(echo "$verify_output" | grep -oE 'TYPE_ANNOTATION_COVERAGE:[0-9]+' | cut -d: -f2 || true)"
+	[ -z "$type_annotation_coverage" ] && type_annotation_coverage=0
+
+	local type_annotations_missing
+	type_annotations_missing="$(echo "$verify_output" | grep -oE 'TYPE_ANNOTATIONS_MISSING:[0-9]+' | cut -d: -f2 || true)"
+	[ -z "$type_annotations_missing" ] && type_annotations_missing=0
+
+	local docstring_coverage
+	docstring_coverage="$(echo "$verify_output" | grep -oE 'DOCSTRING_COVERAGE:[0-9]+' | cut -d: -f2 || true)"
+	[ -z "$docstring_coverage" ] && docstring_coverage=0
+
+	local docstrings_missing
+	docstrings_missing="$(echo "$verify_output" | grep -oE 'DOCSTRINGS_MISSING:[0-9]+' | cut -d: -f2 || true)"
+	[ -z "$docstrings_missing" ] && docstrings_missing=0
+
+	local error_handling_try_count
+	error_handling_try_count="$(echo "$verify_output" | grep -oE 'ERROR_HANDLING_TRY_COUNT:[0-9]+' | cut -d: -f2 || true)"
+	[ -z "$error_handling_try_count" ] && error_handling_try_count=0
+
+	local error_handling_raise_count
+	error_handling_raise_count="$(echo "$verify_output" | grep -oE 'ERROR_HANDLING_RAISE_COUNT:[0-9]+' | cut -d: -f2 || true)"
+	[ -z "$error_handling_raise_count" ] && error_handling_raise_count=0
+
+	local error_handling_guard_clauses
+	error_handling_guard_clauses="$(echo "$verify_output" | grep -oE 'ERROR_HANDLING_GUARD_CLAUSES:[0-9]+' | cut -d: -f2 || true)"
+	[ -z "$error_handling_guard_clauses" ] && error_handling_guard_clauses=0
+
+	local error_handling_density
+	error_handling_density="$(echo "$verify_output" | grep -oE 'ERROR_HANDLING_DENSITY:[0-9.]+' | cut -d: -f2 || true)"
+	[ -z "$error_handling_density" ] && error_handling_density=0
+
 	# Extract metrics from claude JSON output and write result
 	local results_dir="$REPO_DIR/_metrics/benchmarks/$profile/$task_name"
 	mkdir -p "$results_dir"
@@ -1485,7 +1533,12 @@ _benchmark_run_task() {
 		"$cognitive_complexity_avg" "$cognitive_complexity_max" \
 		"$halstead_volume" "$maintainability_index" \
 		"$duplicate_blocks" "$duplicate_score" \
-		"$personality_compliance" "$personality_violations" <<'PYEOF'
+		"$personality_compliance" "$personality_violations" \
+		"$function_count" "$function_count_avg" \
+		"$type_annotation_coverage" "$type_annotations_missing" \
+		"$docstring_coverage" "$docstrings_missing" \
+		"$error_handling_try_count" "$error_handling_raise_count" \
+		"$error_handling_guard_clauses" "$error_handling_density" <<'PYEOF'
 import json, sys
 from datetime import datetime, timezone
 
@@ -1526,6 +1579,16 @@ try:
     duplicate_score = int(sys.argv[31])
     personality_compliance = int(sys.argv[32])
     personality_violations = int(sys.argv[33])
+    function_count = int(sys.argv[34])
+    function_count_avg = float(sys.argv[35])
+    type_annotation_coverage = int(sys.argv[36])
+    type_annotations_missing = int(sys.argv[37])
+    docstring_coverage = int(sys.argv[38])
+    docstrings_missing = int(sys.argv[39])
+    error_handling_try_count = int(sys.argv[40])
+    error_handling_raise_count = int(sys.argv[41])
+    error_handling_guard_clauses = int(sys.argv[42])
+    error_handling_density = float(sys.argv[43])
 
     cost = 0
     duration = 0
@@ -1597,6 +1660,16 @@ try:
         'duplicate_score': duplicate_score,
         'personality_compliance': personality_compliance,
         'personality_violations': personality_violations,
+        'function_count': function_count,
+        'function_count_avg_per_file': function_count_avg,
+        'type_annotation_coverage': type_annotation_coverage,
+        'type_annotations_missing': type_annotations_missing,
+        'docstring_coverage': docstring_coverage,
+        'docstrings_missing': docstrings_missing,
+        'error_handling_try_count': error_handling_try_count,
+        'error_handling_raise_count': error_handling_raise_count,
+        'error_handling_guard_clauses': error_handling_guard_clauses,
+        'error_handling_density': error_handling_density,
     }
 
     with open(out_path, 'w') as f:
@@ -1616,6 +1689,16 @@ except Exception as e:
             'output_tokens_raw': 0,
             'cache_read_tokens': 0, 'cache_creation_tokens': 0,
             'cache_efficiency': 0, 'model': 'unknown', 'error': str(e),
+            'function_count': 0,
+            'function_count_avg_per_file': 0.0,
+            'type_annotation_coverage': 0,
+            'type_annotations_missing': 0,
+            'docstring_coverage': 0,
+            'docstrings_missing': 0,
+            'error_handling_try_count': 0,
+            'error_handling_raise_count': 0,
+            'error_handling_guard_clauses': 0,
+            'error_handling_density': 0.0,
         }
         with open(sys.argv[4], 'w') as f:
             json.dump(fallback, f, indent=2)
