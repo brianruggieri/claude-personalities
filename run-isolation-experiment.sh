@@ -21,7 +21,7 @@ TASKS=(
 	ex-paasio
 )
 REPS=3
-VARIANTS=(limits-amplified minimalism)
+VARIANTS=(limits-amplified minimalism hybrid)
 ORIGINAL_BRANCH=$(git branch --show-current)
 
 # Stash any uncommitted changes so git checkout works
@@ -43,9 +43,9 @@ cleanup() {
 trap cleanup EXIT
 
 echo "╔══════════════════════════════════════════════════════╗"
-echo "║  Limits-Amplified + Minimalism Experiment            ║"
-echo "║  2 profiles × 9 tasks × 3 reps = 54 runs            ║"
-echo "║  Profiles: limits-amplified, minimalism              ║"
+echo "║  Limits-Amplified + Minimalism + Hybrid Experiment   ║"
+echo "║  3 profiles × 9 tasks × 3 reps = 81 runs            ║"
+echo "║  Profiles: limits-amplified, minimalism, hybrid      ║"
 echo "║  Started: $(date '+%Y-%m-%d %H:%M:%S')                    ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
@@ -140,6 +140,6 @@ echo "║  Duration: ${MINUTES}m ${SECONDS_REM}s                                
 echo "║  Finished: $(date '+%Y-%m-%d %H:%M:%S')                   ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
-echo "Results in: _metrics/benchmarks/variant-{limits-amplified,minimalism}/*/"
+echo "Results in: _metrics/benchmarks/variant-{limits-amplified,minimalism,hybrid}/*/"
 echo ""
 echo "Next: Come back to Claude Code to analyze results."
