@@ -75,12 +75,12 @@ for variant in "${VARIANTS[@]}"; do
 	git add claude/CLAUDE.md
 	git commit -m "Set up ${variant} variant profile" --allow-empty 2>/dev/null || true
 
-	if [ ! -d "benchmarks/tasks" ]; then
-		echo "  Syncing benchmarks/ from main..."
-		git checkout main -- benchmarks/
-		git add benchmarks/
-		git commit -m "Sync benchmark tasks from main" 2>/dev/null || true
-	fi
+	# Always sync setup.sh and benchmarks/ from main so variant branches
+	# get the latest analyzers, pipeline code, and task definitions
+	echo "  Syncing setup.sh and benchmarks/ from main..."
+	git checkout main -- setup.sh benchmarks/
+	git add setup.sh benchmarks/
+	git commit -m "Sync setup.sh and benchmarks from main" --allow-empty 2>/dev/null || true
 done
 
 rm -rf "$TMPDIR"
