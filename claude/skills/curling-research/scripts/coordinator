@@ -1,0 +1,227 @@
+#!/usr/bin/env bash
+# coordinator — fan a question out to N notebooks in parallel and emit one
+# A2A v0.2 Task envelope per notebook on stdout (NDJSON, one compact JSON
+# object per line, no blank separators).
+#
+# Usage:
+#   coordinator <slugs-csv> "question"
+#   coordinator --auto "question"          # heuristic-route by tag/keyword
+#   coordinator --list-tags                # show all tags across the library
+#
+# Each NDJSON line is a complete A2A Task object; results stream as each
+# child finishes (not in input order).
+
+set -euo pipefail
+
+SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+INDEX="$SKILL_DIR/agent-cards/index.json"
+ASK="$SKILL_DIR/scripts/ask"
+
+# Stagger between launching child asks, in milliseconds. Default 1200ms (~0.83 req/s)
+# stays under NotebookLM's burst rate limit and gives each ask ~25-30s of priority window.
+STAGGER_MS="${CURLING_RESEARCH_STAGGER_MS:-1200}"
+
+# Maximum concurrent in-flight asks. Default 2. NotebookLM throttles aggressively above this.
+MAX_CONCURRENT="${CURLING_RESEARCH_MAX_CONCURRENT:-2}"
+
+# Quota tracker shared with `ask`. Coordinator writes one record per child launched.
+QUOTA_LOG="${CURLING_RESEARCH_QUOTA_LOG:-$HOME/.cache/curling-research/queries.jsonl}"
+QUOTA_DIR="$(dirname "$QUOTA_LOG")"
+QUOTA_DAILY_CAP=50
+QUOTA_NOTE_THRESHOLD=30
+QUOTA_WARN_THRESHOLD=45
+
+quota_log_query() {
+  local script_name="$1"
+  local slug_name="$2"
+  local status_name="$3"
+  mkdir -p "$QUOTA_DIR" 2>/dev/null || return 0
+  local ts
+  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  jq -cn \
+    --arg ts "$ts" \
+    --arg script "$script_name" \
+    --arg slug "$slug_name" \
+    --arg status "$status_name" \
+    '{ts: $ts, script: $script, slug: $slug, status: $status}' \
+    >> "$QUOTA_LOG" 2>/dev/null || true
+}
+
+quota_warn_if_needed() {
+  local today
+  today="$(date -u +%Y-%m-%d)"
+  local sentinel="$QUOTA_DIR/warning-acknowledged-$today"
+  [[ -f "$sentinel" ]] && return 0
+  [[ -f "$QUOTA_LOG" ]] || return 0
+  local count
+  count=$(grep -c "\"ts\":\"$today" "$QUOTA_LOG" 2>/dev/null || echo 0)
+  count=${count//[^0-9]/}
+  [[ -z "$count" ]] && count=0
+  if (( count >= QUOTA_DAILY_CAP )); then
+    echo "ERROR: ${count}+/${QUOTA_DAILY_CAP} NotebookLM chat queries — daily cap reached. Asks will fail until midnight UTC." >&2
+  elif (( count >= QUOTA_WARN_THRESHOLD )); then
+    echo "WARN: ${count}/${QUOTA_DAILY_CAP} NotebookLM chat queries used today — $((QUOTA_DAILY_CAP - count)) remaining before daily cap" >&2
+  elif (( count >= QUOTA_NOTE_THRESHOLD )); then
+    echo "note: ${count}/${QUOTA_DAILY_CAP} NotebookLM chat queries used today (account-wide free tier cap)" >&2
+  fi
+}
+
+# Compute a decimal seconds string for `sleep` from STAGGER_MS, e.g. "1.200".
+stagger_seconds() {
+  local ms="$STAGGER_MS"
+  ms=${ms//[^0-9]/}
+  [[ -z "$ms" ]] && ms=0
+  printf '%s.%03d' "$((ms/1000))" "$((ms%1000))"
+}
+
+# Count currently in-flight children by counting <slug>.launched markers
+# without a matching <slug>.done marker.
+inflight_count() {
+  local n=0 launched_file done_file slug
+  for launched_file in "$tmpdir"/*.launched; do
+    [[ -f "$launched_file" ]] || continue
+    slug=$(basename "$launched_file" .launched)
+    done_file="$tmpdir/$slug.done"
+    [[ -f "$done_file" ]] || n=$((n+1))
+  done
+  printf '%d' "$n"
+}
+
+case "${1:-}" in
+  --list-tags)
+    jq -r '[.agents[].tags[]] | unique | .[]' "$INDEX"
+    exit 0 ;;
+  --auto)
+    shift
+    question="${*:?need question}"
+    # Tag-based routing: lowercase the question, lowercase each tag, check
+    # whether the question contains any tag as a substring. The previous
+    # `($q | contains(.))` form mis-scoped `.` (it referred to the question,
+    # not the tag), so it returned every slug. Use `as $tag` to name the
+    # tag explicitly, then evaluate `$q | contains($tag)` on the question.
+    slugs=$(jq -r --arg q "$(printf '%s' "$question" | tr 'A-Z' 'a-z')" '
+      [ .agents[]
+        | select(any(.tags[] as $tag | $q | contains($tag | ascii_downcase); .))
+        | .slug ]
+      | unique
+      | join(",")
+    ' "$INDEX")
+    if [[ -z "$slugs" ]]; then
+      echo "no slugs matched; defaulting to coordinator-pick:02-physics,05-strategy-analytics" >&2
+      slugs="02-physics,05-strategy-analytics"
+    fi
+    echo "routed to: $slugs" >&2
+    ;;
+  -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
+  *)
+    slugs="${1:?usage: coordinator <slugs-csv> | --auto \"question\"}"
+    shift
+    question="${*:?need question}"
+    ;;
+esac
+
+context_id="${CURLING_RESEARCH_CONTEXT:-$(uuidgen | tr 'A-Z' 'a-z')}"
+export CURLING_RESEARCH_CONTEXT="$context_id"
+
+tmpdir=$(mktemp -d)
+trap 'rm -rf "$tmpdir"' EXIT
+
+IFS=',' read -ra slug_arr <<< "$slugs"
+
+# Launch children with a concurrency cap and stagger between launches.
+# Each child writes its JSON to <slug>.json, errors to <slug>.err, and
+# touches <slug>.done as the last step so the poller can distinguish
+# "finished" from "still writing". A <slug>.launched marker is dropped at
+# launch time so `inflight_count` can compute (launched - done).
+#
+# Bash 3.2 lacks `wait -n`, so we poll the .done markers in a 200ms loop
+# until inflight_count < MAX_CONCURRENT before launching the next child.
+# This is the same polling pattern the streaming output loop uses.
+sleep_decimal="$(stagger_seconds)"
+launched_any=0
+for slug in "${slug_arr[@]}"; do
+  # Block until there's room under the concurrency cap.
+  while [[ "$(inflight_count)" -ge "$MAX_CONCURRENT" ]]; do
+    sleep 0.2
+  done
+
+  # Stagger between launches (skip before the first one — no benefit).
+  if [[ "$launched_any" -eq 1 ]]; then
+    sleep "$sleep_decimal"
+  fi
+
+  out="$tmpdir/$slug.json"
+  err="$tmpdir/$slug.err"
+  done_marker="$tmpdir/$slug.done"
+  touch "$tmpdir/$slug.launched"
+  quota_log_query "coordinator" "$slug" "launched"
+  (
+    if "$ASK" --json "$slug" "$question" >"$out" 2>"$err"; then
+      printf '0' >"$tmpdir/$slug.exit"
+    else
+      printf '%s' "$?" >"$tmpdir/$slug.exit"
+    fi
+    touch "$done_marker"
+  ) &
+  launched_any=1
+done
+
+emit_failure() {
+  local slug="$1"
+  local err_msg="$2"
+  [[ -z "$err_msg" ]] && err_msg="ask subprocess failed"
+  jq -cn \
+    --arg id "$(uuidgen | tr 'A-Z' 'a-z')" \
+    --arg contextId "$context_id" \
+    --arg slug "$slug" \
+    --arg err "$err_msg" \
+    '{
+      id: $id,
+      contextId: $contextId,
+      kind: "task",
+      status: { state: "failed", message: $err },
+      artifacts: [],
+      metadata: { slug: $slug, error: $err }
+    }'
+}
+
+# Poll for completed children and emit each as soon as it finishes. macOS
+# default bash is 3.2 (no `wait -n`), so polling is the portable approach.
+# Sleep interval is 200ms — small enough that streaming feels live for an
+# interactive shell, large enough to keep CPU at zero while waiting on
+# multi-second NotebookLM round-trips.
+pending_slugs=("${slug_arr[@]}")
+while [[ ${#pending_slugs[@]} -gt 0 ]]; do
+  remaining=()
+  for slug in "${pending_slugs[@]}"; do
+    if [[ -f "$tmpdir/$slug.done" ]]; then
+      exit_code=$(cat "$tmpdir/$slug.exit" 2>/dev/null || echo "1")
+      if [[ "$exit_code" == "0" ]] \
+         && [[ -s "$tmpdir/$slug.json" ]] \
+         && jq empty "$tmpdir/$slug.json" >/dev/null 2>&1; then
+        # Child output is already a single compact JSON line from `ask`.
+        # Concatenating it with `cat` preserves the trailing newline,
+        # which is the NDJSON record separator. No extra blank line.
+        cat "$tmpdir/$slug.json"
+      else
+        err_msg=$(head -n1 "$tmpdir/$slug.err" 2>/dev/null || true)
+        emit_failure "$slug" "$err_msg"
+      fi
+    else
+      remaining+=("$slug")
+    fi
+  done
+  pending_slugs=("${remaining[@]}")
+  if [[ ${#pending_slugs[@]} -gt 0 ]]; then
+    sleep 0.2
+  fi
+done
+
+# Reap any lingering processes (should be none — `done` markers fire after
+# the subshell's last statement — but be defensive).
+wait 2>/dev/null || true
+
+# Emit final quota warning once after the run, even if no individual ask
+# crossed a threshold mid-fan-out (`ask` re-checks per-call, but the user
+# may have launched a multi-slug coordinator that pushed the total over).
+quota_warn_if_needed

@@ -3,6 +3,10 @@
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "permissions": {
     "allow": [
       "Bash(npx:*)",
@@ -29,12 +33,69 @@
       "Bash(grep:*)",
       "Bash(plutil:*)",
       "Bash(tmux:*)",
-      "WebSearch"
+      "WebSearch",
+      "WebFetch"
     ],
-    "deny": [],
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(rm -rf ~)",
+      "Bash(rm -rf .)",
+      "Bash(git push --force *)",
+      "Bash(git push * --force *)",
+      "Bash(git reset --hard *)",
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Read(**/.env)",
+      "Read(**/.env.*)"
+    ],
     "defaultMode": "acceptEdits"
   },
-  "hooks": {},
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/scripts/patch-superpowers.py",
+            "timeout": 10,
+            "statusMessage": "Checking plugin patches..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/gh-repo-guard.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "TeamCreate",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'TEAM=$(cat | jq -r \".tool_input.team_name // empty\"); TEAM=$(printf \"%s\" \"$TEAM\" | tr -cd \"a-zA-Z0-9_-\"); if [ -n \"$TEAM\" ] && ! pgrep -f \"teamchat.*$TEAM\" > /dev/null; then teamchat --team \"$TEAM\" & fi'",
+            "timeout": 5,
+            "async": true
+          }
+        ]
+      }
+    ]
+  },
+  "worktree": {
+    "symlinkDirectories": [
+      "node_modules",
+      ".cache",
+      ".claude"
+    ]
+  },
   "statusLine": {
     "type": "command",
     "command": "bash $HOME/.claude/statusline-command.sh"
@@ -47,7 +108,9 @@
     "ralph-loop@claude-plugins-official": true,
     "playwright@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
-    "impeccable@impeccable": true
+    "impeccable@impeccable": true,
+    "rust-analyzer-lsp@claude-plugins-official": true,
+    "ponytail@ponytail": true
   },
   "extraKnownMarketplaces": {
     "impeccable": {
@@ -55,16 +118,18 @@
         "source": "github",
         "repo": "pbakaus/impeccable"
       }
+    },
+    "ponytail": {
+      "source": {
+        "source": "github",
+        "repo": "DietrichGebert/ponytail"
+      }
     }
   },
+  "sandbox": {
+    "allowUnsandboxedCommands": false
+  },
   "effortLevel": "high",
-  "skipDangerousModePermissionPrompt": true,
-  "attribution": {
-    "commit": "",
-    "pr": ""
-  },
-  "worktree": {
-    "symlinkDirectories": ["node_modules", ".cache"]
-  },
-  "showThinkingSummaries": true
+  "showThinkingSummaries": true,
+  "skipDangerousModePermissionPrompt": true
 }

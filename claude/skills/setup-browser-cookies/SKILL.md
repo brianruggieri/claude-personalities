@@ -1,0 +1,1 @@
+/Users/brianruggieri/git/claude_personalities/claude/skills/gstack/setup-browser-cookies/SKILL.md

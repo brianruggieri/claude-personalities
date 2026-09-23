@@ -9,4 +9,8 @@ def has_close_elements(numbers: List[float], threshold: float) -> bool:
     >>> has_close_elements([1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3)
     True
     """
-    pass
+    for idx, first in enumerate(numbers):
+        for second in numbers[idx + 1:]:
+            if abs(first - second) < threshold:
+                return True
+    return False

@@ -9,9 +9,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { getProjectEvalDir } from './eval-store';
+import { hermeticChildEnv, isHermeticEnabled } from './hermetic-env';
 
 const GSTACK_DEV_DIR = path.join(os.homedir(), '.gstack-dev');
-const HEARTBEAT_PATH = path.join(GSTACK_DEV_DIR, 'e2e-live.json');
+const HEARTBEAT_PATH = path.join(GSTACK_DEV_DIR, 'e2e-live.json'); // heartbeat stays global
+const PROJECT_DIR = path.dirname(getProjectEvalDir()); // ~/.gstack/projects/$SLUG/
 
 /** Sanitize test name for use as filename: strip leading slashes, replace / with - */
 export function sanitizeTestName(name: string): string {
@@ -41,6 +44,12 @@ export interface SkillTestResult {
   output: string;
   costEstimate: CostEstimate;
   transcript: any[];
+  /** Which model was used for this test (added for Sonnet/Opus split diagnostics) */
+  model: string;
+  /** Time from spawn to first NDJSON line, in ms (added for rate-limit diagnostics) */
+  firstResponseMs: number;
+  /** Peak latency between consecutive tool calls, in ms */
+  maxInterTurnMs: number;
 }
 
 const BROWSE_ERROR_PATTERNS = [
@@ -116,6 +125,12 @@ export async function runSkillTest(options: {
   timeout?: number;
   testName?: string;
   runId?: string;
+  /** Model to use. Defaults to claude-sonnet-4-6 (overridable via EVALS_MODEL env). */
+  model?: string;
+  /** Extra env vars merged into the spawned claude -p process. Useful for
+   *  per-test GSTACK_HOME overrides so the test doesn't have to spell out
+   *  env setup in the prompt itself. */
+  env?: Record<string, string>;
 }): Promise<SkillTestResult> {
   const {
     prompt,
@@ -125,7 +140,9 @@ export async function runSkillTest(options: {
     timeout = 120_000,
     testName,
     runId,
+    env: extraEnv,
   } = options;
+  const model = options.model ?? process.env.EVALS_MODEL ?? 'claude-sonnet-4-6';
 
   const startTime = Date.now();
   const startedAt = new Date().toISOString();
@@ -135,7 +152,7 @@ export async function runSkillTest(options: {
   const safeName = testName ? sanitizeTestName(testName) : null;
   if (runId) {
     try {
-      runDir = path.join(GSTACK_DEV_DIR, 'e2e-runs', runId);
+      runDir = path.join(PROJECT_DIR, 'e2e-runs', runId);
       fs.mkdirSync(runDir, { recursive: true });
     } catch { /* non-fatal */ }
   }
@@ -144,19 +161,34 @@ export async function runSkillTest(options: {
   // avoid shell escaping issues. --verbose is required for stream-json mode.
   const args = [
     '-p',
+    '--model', model,
     '--output-format', 'stream-json',
     '--verbose',
     '--dangerously-skip-permissions',
     '--max-turns', String(maxTurns),
     '--allowed-tools', ...allowedTools,
   ];
+  // Hermetic children get zero MCP servers (no --mcp-config is passed).
+  // Gated on the same call-time check as the env scrub so EVALS_HERMETIC=0
+  // restores operator MCP along with the operator env.
+  if (isHermeticEnabled()) args.push('--strict-mcp-config');
 
-  // Write prompt to a temp file and pipe it via shell to avoid stdin buffering issues
-  const promptFile = path.join(workingDirectory, '.prompt-tmp');
+  // Write prompt to a temp file OUTSIDE workingDirectory to avoid race conditions
+  // where afterAll cleanup deletes the dir before cat reads the file (especially
+  // with --concurrent --retry). Using os.tmpdir() + unique suffix keeps it stable.
+  const promptFile = path.join(os.tmpdir(), `.prompt-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   fs.writeFileSync(promptFile, prompt);
 
   const proc = Bun.spawn(['sh', '-c', `cat "${promptFile}" | claude ${args.map(a => `"${a}"`).join(' ')}`], {
     cwd: workingDirectory,
+    // Hermetic by default (see test/helpers/hermetic-env.ts): operator
+    // session context (CONDUCTOR_*, CLAUDECODE, ~/.claude config, ~/.gstack)
+    // never reaches the child; EVALS_HERMETIC=0 restores the legacy env.
+    // Default GSTACK_HEADLESS=1 so eval/E2E runs classify as headless (BLOCK on an
+    // AskUserQuestion failure rather than emit a prose question no human reads). A
+    // suite exercising the INTERACTIVE prose-fallback path opts out by passing
+    // `env: { GSTACK_HEADLESS: '' }` — extraEnv wins because it spreads last.
+    env: hermeticChildEnv({ GSTACK_HEADLESS: '1', ...extraEnv }),
     stdout: 'pipe',
     stderr: 'pipe',
   });
@@ -175,6 +207,9 @@ export async function runSkillTest(options: {
   const collectedLines: string[] = [];
   let liveTurnCount = 0;
   let liveToolCount = 0;
+  let firstResponseMs = 0;
+  let lastToolTime = 0;
+  let maxInterTurnMs = 0;
   const stderrPromise = new Response(proc.stderr).text();
 
   const reader = proc.stdout.getReader();
@@ -201,7 +236,15 @@ export async function runSkillTest(options: {
             for (const item of content) {
               if (item.type === 'tool_use') {
                 liveToolCount++;
-                const elapsed = Math.round((Date.now() - startTime) / 1000);
+                const now = Date.now();
+                const elapsed = Math.round((now - startTime) / 1000);
+                // Track timing telemetry
+                if (firstResponseMs === 0) firstResponseMs = now - startTime;
+                if (lastToolTime > 0) {
+                  const interTurn = now - lastToolTime;
+                  if (interTurn > maxInterTurnMs) maxInterTurnMs = interTurn;
+                }
+                lastToolTime = now;
                 const progressLine = `  [${elapsed}s] turn ${liveTurnCount} tool #${liveToolCount}: ${item.name}(${truncate(JSON.stringify(item.input || {}), 80)})\n`;
                 process.stderr.write(progressLine);
 
@@ -278,12 +321,13 @@ export async function runSkillTest(options: {
 
   // Use resultLine for structured result data
   if (resultLine) {
-    if (resultLine.is_error) {
+    if (resultLine.subtype === 'success' && resultLine.is_error) {
       // claude -p can return subtype=success with is_error=true (e.g. API connection failure)
       exitReason = 'error_api';
     } else if (resultLine.subtype === 'success') {
       exitReason = 'success';
     } else if (resultLine.subtype) {
+      // Preserve known subtypes like error_max_turns even if is_error is set
       exitReason = resultLine.subtype;
     }
   }
@@ -330,5 +374,5 @@ export async function runSkillTest(options: {
     turnsUsed,
   };
 
-  return { toolCalls, browseErrors, exitReason, duration, output: resultLine?.result || '', costEstimate, transcript };
+  return { toolCalls, browseErrors, exitReason, duration, output: resultLine?.result || '', costEstimate, transcript, model, firstResponseMs, maxInterTurnMs };
 }

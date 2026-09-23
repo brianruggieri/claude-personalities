@@ -1,0 +1,6 @@
+# NotebookLM IDs are user-specific — never commit
+registry.json
+
+# Generated cards (rebuild via scripts/build-cards.py)
+agent-cards/[0-9]*.json
+agent-cards/coordinator.json

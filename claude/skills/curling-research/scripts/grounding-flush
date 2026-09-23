@@ -1,0 +1,257 @@
+#!/usr/bin/env bash
+# grounding-flush — read pending grounding suggestions, dedupe against the
+# cache, run ONE coordinator fan-out, and write results back to the cache.
+#
+# Usage:
+#   grounding-flush                       # interactive: confirm + run
+#   grounding-flush -y | --yes            # skip confirmation
+#   grounding-flush --status              # print pending suggestions, no query
+#   grounding-flush --dry-run             # show what would be queried
+#   grounding-flush --clear               # drop pending without querying
+#   grounding-flush -h | --help           # this help
+
+set -euo pipefail
+
+SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LIB="$SKILL_DIR/scripts/grounding-cache.sh"
+COORDINATOR="$SKILL_DIR/scripts/coordinator"
+
+if [[ ! -f "$LIB" ]]; then
+  echo "error: grounding-cache.sh not found at $LIB" >&2
+  exit 1
+fi
+# shellcheck source=/dev/null
+source "$LIB"
+
+PENDING="$(cache_pending_path)"
+HISTORY="$(cache_history_path)"
+CACHE="$(cache_path)"
+
+QUOTA_LOG="${CURLING_RESEARCH_QUOTA_LOG:-$HOME/.cache/curling-research/queries.jsonl}"
+QUOTA_DAILY_CAP=50
+
+mode="run"
+assume_yes=0
+case "${1:-}" in
+  -h|--help)  sed -n '2,12p' "$0"; exit 0 ;;
+  --status)   mode="status" ;;
+  --dry-run)  mode="dry" ;;
+  --clear)    mode="clear" ;;
+  -y|--yes)   assume_yes=1 ;;
+  "")         ;;
+  *)          echo "unknown flag: $1" >&2; exit 2 ;;
+esac
+
+# Count today's NotebookLM ask queries to project remaining quota.
+quota_used_today() {
+  [[ -f "$QUOTA_LOG" ]] || { printf '0'; return; }
+  local today count
+  today=$(date -u +%Y-%m-%d)
+  count=$(grep -c "\"ts\":\"$today.*\"script\":\"ask\"" "$QUOTA_LOG" 2>/dev/null || echo 0)
+  count=${count//[^0-9]/}
+  [[ -z "$count" ]] && count=0
+  printf '%s' "$count"
+}
+
+# Empty / missing pending file → friendly nothing-to-report.
+if [[ ! -s "$PENDING" ]]; then
+  if [[ "$mode" == "status" ]]; then
+    echo "no pending grounding suggestions"
+    echo "  pending log: $PENDING"
+    exit 0
+  elif [[ "$mode" == "clear" ]]; then
+    echo "pending log already empty"
+    exit 0
+  else
+    echo "no pending grounding suggestions — nothing to flush"
+    exit 0
+  fi
+fi
+
+# --status: human-readable dump of pending entries.
+if [[ "$mode" == "status" ]]; then
+  pending_count=$(wc -l < "$PENDING" | tr -d ' ')
+  echo "pending grounding suggestions: $pending_count"
+  echo "  (log: $PENDING)"
+  echo ""
+  jq -r '
+    "  • \(.file):\(.line)\n    change : \(.change)\n    slugs  : \(.suggested_slugs)\n    query  : \(.suggested_query)\n    key    : \(.key)\n"
+  ' "$PENDING"
+  exit 0
+fi
+
+# --clear: drop pending without querying.
+if [[ "$mode" == "clear" ]]; then
+  pending_count=$(wc -l < "$PENDING" | tr -d ' ')
+  : > "$PENDING"
+  echo "cleared $pending_count pending suggestion(s) without querying"
+  exit 0
+fi
+
+# Build the dedupe + cache-hit accounting.
+# Steps:
+#   1) Walk pending entries; for each, check cache_lookup on its key.
+#      Cache hits → "skipped" list; cache misses → "to-query" list.
+#   2) Group "to-query" entries by (slugs, query) tuple — one coordinator
+#      run per unique tuple.
+#   3) Each tuple, when answered, writes back N cache entries (one per key
+#      that maps to that tuple).
+
+tmpdir=$(mktemp -d)
+trap 'rm -rf "$tmpdir"' EXIT
+
+cached_log="$tmpdir/cached.jsonl"
+toquery_log="$tmpdir/toquery.jsonl"
+: > "$cached_log"
+: > "$toquery_log"
+
+while IFS= read -r entry; do
+  [[ -z "$entry" ]] && continue
+  key=$(printf '%s' "$entry" | jq -r '.key')
+  hit=$(cache_lookup "$key" || true)
+  if [[ -n "$hit" ]]; then
+    printf '%s\n' "$entry" >> "$cached_log"
+  else
+    printf '%s\n' "$entry" >> "$toquery_log"
+  fi
+done < "$PENDING"
+
+pending_count=$(wc -l < "$PENDING" | tr -d ' ')
+cached_count=$(wc -l < "$cached_log" | tr -d ' ')
+toquery_count=$(wc -l < "$toquery_log" | tr -d ' ')
+
+# Build unique (slugs, query) tuples.
+unique_tuples="$tmpdir/unique-tuples.jsonl"
+if [[ "$toquery_count" -gt 0 ]]; then
+  jq -sc '
+    group_by([.suggested_slugs, .suggested_query])
+    | map({
+        slugs:  .[0].suggested_slugs,
+        query:  .[0].suggested_query,
+        keys:   [.[].key],
+        files:  [.[].file] | unique,
+        changes: [.[].change]
+      })
+  ' "$toquery_log" | jq -c '.[]' > "$unique_tuples"
+else
+  : > "$unique_tuples"
+fi
+unique_count=$(wc -l < "$unique_tuples" | tr -d ' ')
+
+if [[ "$unique_count" -eq 0 ]]; then
+  echo "All $pending_count pending change(s) already grounded (cache hit) — clearing pending log."
+  : > "$PENDING"
+  exit 0
+fi
+
+quota_used=$(quota_used_today)
+quota_remaining=$((QUOTA_DAILY_CAP - quota_used))
+# `unique_count` queries trigger ~unique * (avg slugs per tuple) ask rows;
+# treat each tuple as one logical "query batch" and surface the
+# coordinator child count separately for the user.
+total_children=$(jq -s 'map((.slugs | split(",") | length)) | add // 0' "$unique_tuples")
+
+echo "GROUNDING FLUSH"
+echo "  Pending suggestions:    $pending_count"
+echo "  Cache hits (skipped):   $cached_count"
+echo "  Unique queries to run:  $unique_count"
+echo "  Coordinator child asks: $total_children"
+echo "  Estimated quota cost:   $total_children queries ($((quota_remaining - total_children))/${QUOTA_DAILY_CAP} remaining today)"
+echo ""
+
+# Block when over cap.
+if [[ "$total_children" -gt "$quota_remaining" ]]; then
+  echo "ERROR: quota would be exceeded ($total_children needed, $quota_remaining remaining today)." >&2
+  echo "Pending log left intact — re-run after midnight UTC, or clear with --clear." >&2
+  exit 3
+fi
+
+if [[ "$mode" == "dry" ]]; then
+  echo "DRY RUN — would dispatch:"
+  jq -r '
+    . as $t
+    | ($t.keys | join(", ")) as $keys_csv
+    | "  → slugs: \($t.slugs)\n    keys : \($keys_csv)\n    query: \($t.query)\n"
+  ' "$unique_tuples"
+  exit 0
+fi
+
+if [[ "$assume_yes" -ne 1 ]]; then
+  printf "Proceed? [y/N] " >&2
+  read -r reply
+  case "$reply" in
+    y|Y|yes|YES) ;;
+    *) echo "aborted — pending log left intact" >&2; exit 1 ;;
+  esac
+fi
+
+# Drive coordinator once per unique tuple. Append results to history,
+# and write a cache entry for every key that mapped to this tuple.
+ts_run=$(_cache_now_iso)
+results_log="$tmpdir/results.jsonl"
+: > "$results_log"
+
+while IFS= read -r tuple; do
+  [[ -z "$tuple" ]] && continue
+  slugs=$(printf '%s' "$tuple" | jq -r '.slugs')
+  query=$(printf '%s' "$tuple" | jq -r '.query')
+  keys=$(printf '%s' "$tuple" | jq -r '.keys | .[]')
+
+  echo "------------------------------------------------------------"
+  echo "querying [$slugs]"
+  echo "  → $query"
+  echo "------------------------------------------------------------"
+
+  coord_out="$tmpdir/coord.ndjson"
+  if ! "$COORDINATOR" "$slugs" "$query" > "$coord_out" 2>&1; then
+    echo "  WARN: coordinator failed for slugs=$slugs — see output above" >&2
+    continue
+  fi
+
+  # Concatenate every artifact's text part into one merged answer for
+  # cache-summary purposes. Citation count is the sum across notebooks.
+  merged_answer=$(jq -rs '
+    map(.artifacts // [] | map(select(.name == "answer") | .parts // [] | map(.text // "") | join("\n")) | join("\n"))
+    | join("\n\n--- next notebook ---\n\n")
+  ' "$coord_out" 2>/dev/null || true)
+  citation_count=$(jq -s '
+    [.[] | (.metadata.sourceCount // 0)] | add // 0
+  ' "$coord_out" 2>/dev/null || echo 0)
+
+  if [[ -z "$merged_answer" ]]; then
+    merged_answer="(no answer text returned)"
+  fi
+
+  # Write one cache entry per key.
+  while IFS= read -r key; do
+    [[ -z "$key" ]] && continue
+    cache_put "$key" "$slugs" "$query" "$merged_answer" || true
+  done <<< "$keys"
+
+  # Print digest line for each key in this tuple.
+  short_summary=$(printf '%s' "$merged_answer" | tr '\n' ' ' | cut -c1-160)
+  while IFS= read -r key; do
+    [[ -z "$key" ]] && continue
+    printf '  %s → [%s citations] %s\n' "$key" "$citation_count" "$short_summary"
+  done <<< "$keys"
+
+  # Append a single history record per tuple.
+  jq -cn \
+    --arg ts "$ts_run" \
+    --arg slugs "$slugs" \
+    --arg query "$query" \
+    --argjson keys "$(printf '%s' "$tuple" | jq '.keys')" \
+    --argjson citations "$citation_count" \
+    --arg answer_summary "$short_summary" \
+    '{ts:$ts, slugs:$slugs, query:$query, keys:$keys, citation_count:$citations, answer_summary:$answer_summary}' \
+    >> "$HISTORY" 2>/dev/null || true
+done < "$unique_tuples"
+
+# Successful flush — clear the pending log.
+: > "$PENDING"
+
+echo ""
+echo "flushed $unique_count query/queries, cleared $pending_count pending suggestion(s)."
+echo "  cache: $CACHE"
+echo "  history: $HISTORY"
+exit 0

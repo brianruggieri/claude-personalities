@@ -1,0 +1,237 @@
+#!/usr/bin/env bash
+# ask — query a single notebook in the curling-research library.
+#
+# Usage:
+#   ask <slug> "question"
+#   ask --json <slug> "question"      # emit A2A v0.2 Task envelope (NDJSON-safe)
+#   ask --list                        # list available slugs
+#
+# Reads notebook ID from registry.json. Wraps `notebooklm ask`.
+# Emits a real A2A v0.2 Task object (https://a2a-protocol.org/v0.2.6/specification/)
+# in --json mode: id, contextId, status:{state}, kind:"task", artifacts:[...].
+
+set -euo pipefail
+
+SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REGISTRY="$SKILL_DIR/registry.json"
+INDEX="$SKILL_DIR/agent-cards/index.json"
+
+# Worktree fallback for registry.json.
+#
+# registry.json holds user-specific NotebookLM notebook IDs. It is
+# gitignored (correctly — IDs are tied to the user's Google account
+# and aren't portable), which means `git worktree add` doesn't copy it
+# to a new worktree. Without a fallback, every fresh worktree breaks
+# this script with "registry.json not found — run scripts/bootstrap.sh"
+# even though the primary checkout has a perfectly good registry, and
+# bootstrap.sh would wastefully create duplicate notebooks in NotebookLM.
+#
+# The fix: if the local registry is missing, resolve the primary
+# checkout via `git worktree list --porcelain` (first row is always
+# the primary) and read the registry from there. Read-only — never
+# write to the primary's registry from a worktree path.
+if [[ ! -f "$REGISTRY" ]]; then
+  primary_root="$(git -C "$SKILL_DIR" worktree list --porcelain 2>/dev/null \
+    | awk '/^worktree /{print $2; exit}')"
+  if [[ -n "$primary_root" && "$primary_root" != "$(cd "$SKILL_DIR/../../.." && pwd)" ]]; then
+    primary_registry="$primary_root/.claude/skills/curling-research/registry.json"
+    if [[ -f "$primary_registry" ]]; then
+      REGISTRY="$primary_registry"
+    fi
+  fi
+fi
+
+# Quota tracking: append a one-line JSON record per query attempt.
+QUOTA_LOG="${CURLING_RESEARCH_QUOTA_LOG:-$HOME/.cache/curling-research/queries.jsonl}"
+QUOTA_DIR="$(dirname "$QUOTA_LOG")"
+QUOTA_DAILY_CAP=50
+QUOTA_NOTE_THRESHOLD=30
+QUOTA_WARN_THRESHOLD=45
+
+# Append a JSONL record for one query attempt. Args: script, slug, status.
+# Safe to call multiple times; no-ops on jq failure.
+quota_log_query() {
+  local script_name="$1"
+  local slug_name="$2"
+  local status_name="$3"
+  mkdir -p "$QUOTA_DIR" 2>/dev/null || return 0
+  local ts
+  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  jq -cn \
+    --arg ts "$ts" \
+    --arg script "$script_name" \
+    --arg slug "$slug_name" \
+    --arg status "$status_name" \
+    '{ts: $ts, script: $script, slug: $slug, status: $status}' \
+    >> "$QUOTA_LOG" 2>/dev/null || true
+}
+
+# Emit a stderr note/warn/error line if today's count crosses thresholds.
+# Suppressed if a sentinel file ~/.cache/curling-research/warning-acknowledged-<UTCdate>
+# exists (set via `scripts/quota --reset-warning`).
+quota_warn_if_needed() {
+  local today
+  today="$(date -u +%Y-%m-%d)"
+  local sentinel="$QUOTA_DIR/warning-acknowledged-$today"
+  [[ -f "$sentinel" ]] && return 0
+  [[ -f "$QUOTA_LOG" ]] || return 0
+  local count
+  count=$(grep -c "\"ts\":\"$today" "$QUOTA_LOG" 2>/dev/null || echo 0)
+  count=${count//[^0-9]/}
+  [[ -z "$count" ]] && count=0
+  if (( count >= QUOTA_DAILY_CAP )); then
+    echo "ERROR: ${count}+/${QUOTA_DAILY_CAP} NotebookLM chat queries — daily cap reached. Asks will fail until midnight UTC." >&2
+  elif (( count >= QUOTA_WARN_THRESHOLD )); then
+    echo "WARN: ${count}/${QUOTA_DAILY_CAP} NotebookLM chat queries used today — $((QUOTA_DAILY_CAP - count)) remaining before daily cap" >&2
+  elif (( count >= QUOTA_NOTE_THRESHOLD )); then
+    echo "note: ${count}/${QUOTA_DAILY_CAP} NotebookLM chat queries used today (account-wide free tier cap)" >&2
+  fi
+}
+
+JSON_OUT=0
+case "${1:-}" in
+  --list)
+    jq -r '.agents[] | "\(.slug)  — \(.name)"' "$INDEX"
+    exit 0 ;;
+  --json) JSON_OUT=1; shift ;;
+  -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
+esac
+
+slug="${1:?usage: ask [--json|--list] <slug> \"question\"}"
+shift
+question="${*:?need question}"
+
+if [[ ! -f "$REGISTRY" ]]; then
+  echo "error: registry.json not found — run scripts/bootstrap.sh first" >&2
+  exit 1
+fi
+
+nb_id=$(jq -r --arg s "$slug" '.notebooks[] | select(.slug==$s) | .notebook_id' "$REGISTRY")
+if [[ -z "$nb_id" || "$nb_id" == "null" ]]; then
+  echo "error: slug '$slug' not in registry. Available:" >&2
+  jq -r '.notebooks[].slug' "$REGISTRY" >&2
+  exit 1
+fi
+
+context_id="${CURLING_RESEARCH_CONTEXT:-$(uuidgen | tr 'A-Z' 'a-z')}"
+task_id="$(uuidgen | tr 'A-Z' 'a-z')"
+artifact_id="$(uuidgen | tr 'A-Z' 'a-z')"
+
+if [[ "$JSON_OUT" == "1" ]]; then
+  # Capture both stdout and a tmpfile so we can detect failure cleanly.
+  raw_out_file="$(mktemp)"
+  raw_err_file="$(mktemp)"
+  trap 'rm -f "$raw_out_file" "$raw_err_file"' EXIT
+
+  # Always pass -n explicitly; never mutate global notebooklm state.
+  if notebooklm ask --json -n "$nb_id" "$question" >"$raw_out_file" 2>"$raw_err_file"; then
+    raw=$(cat "$raw_out_file")
+    # Try to parse as JSON; if NotebookLM emits structured output use it,
+    # otherwise treat the entire blob as plain text.
+    if printf '%s' "$raw" | jq empty >/dev/null 2>&1; then
+      # Structured response — extract answer text and citations defensively.
+      # Different notebooklm versions vary; pull common shapes.
+      answer_text=$(printf '%s' "$raw" | jq -r '
+        (.answer // .text // .response // .output // .content // .) |
+        if type == "string" then . else tostring end
+      ')
+      # NotebookLM emits citations under `.references` (array of objects with
+      # source_id, citation_number, cited_text, start_char, end_char, chunk_id).
+      # Map to A2A shape — preserve every field, alias the human-friendly ones
+      # (title, snippet) for clients that read the spec literally.
+      citations_json=$(printf '%s' "$raw" | jq -c '
+        (.references // .citations // .sources // .source_citations // []) |
+        if type == "array" then
+          map(
+            . as $c |
+            {
+              source_id: ($c.source_id // $c.id // null),
+              citation_number: ($c.citation_number // null),
+              title: ($c.title // $c.cited_text // null),
+              snippet: ($c.snippet // $c.cited_text // null),
+              url: ($c.url // null),
+              page: ($c.page // null),
+              start_char: ($c.start_char // null),
+              end_char: ($c.end_char // null),
+              chunk_id: ($c.chunk_id // null)
+            } |
+            with_entries(select(.value != null))
+          )
+        else [] end
+      ')
+    else
+      answer_text="$raw"
+      citations_json='[]'
+    fi
+
+    jq -cn \
+      --arg id "$task_id" \
+      --arg contextId "$context_id" \
+      --arg slug "$slug" \
+      --arg nbId "$nb_id" \
+      --arg artifactId "$artifact_id" \
+      --arg text "$answer_text" \
+      --argjson citations "$citations_json" \
+      '{
+        id: $id,
+        contextId: $contextId,
+        kind: "task",
+        status: { state: "completed" },
+        artifacts: (
+          [{
+            artifactId: $artifactId,
+            name: "answer",
+            parts: [{ kind: "text", text: $text }]
+          }]
+          + (if ($citations | length) > 0 then
+              [{
+                artifactId: ($artifactId + "-citations"),
+                name: "citations",
+                parts: [{ kind: "data", data: { citations: $citations } }]
+              }]
+             else [] end)
+        ),
+        metadata: {
+          slug: $slug,
+          notebookId: $nbId,
+          sourceCount: ($citations | length)
+        }
+      }'
+    quota_log_query "ask" "$slug" "completed"
+    quota_warn_if_needed
+  else
+    err_msg=$(head -n1 "$raw_err_file" 2>/dev/null || true)
+    [[ -z "$err_msg" ]] && err_msg="notebooklm ask failed"
+    jq -cn \
+      --arg id "$task_id" \
+      --arg contextId "$context_id" \
+      --arg slug "$slug" \
+      --arg nbId "$nb_id" \
+      --arg err "$err_msg" \
+      '{
+        id: $id,
+        contextId: $contextId,
+        kind: "task",
+        status: { state: "failed", message: $err },
+        artifacts: [],
+        metadata: {
+          slug: $slug,
+          notebookId: $nbId,
+          error: $err
+        }
+      }'
+    quota_log_query "ask" "$slug" "failed"
+    quota_warn_if_needed
+    exit 1
+  fi
+else
+  # Direct query — never mutate global notebooklm state via `notebooklm use`.
+  if notebooklm ask -n "$nb_id" "$question"; then
+    quota_log_query "ask" "$slug" "completed"
+  else
+    rc=$?
+    quota_log_query "ask" "$slug" "failed"
+    quota_warn_if_needed
+    exit "$rc"
+  fi
+fi

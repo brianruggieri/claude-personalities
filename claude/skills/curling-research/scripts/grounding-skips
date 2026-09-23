@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# grounding-skips — report skip-and-commit patterns from the pre-commit gate.
+#
+# Reads ~/.cache/curling-research/skipped-grounding.jsonl and surfaces
+# which files / keys / branches recur in skipped grounding.
+#
+# Usage:
+#   grounding-skips                # last 14 days summary
+#   grounding-skips --days N       # N-day window
+#   grounding-skips --by-file      # group by file
+#   grounding-skips --by-key       # group by suggestion key
+#   grounding-skips --json         # machine-readable
+
+set -euo pipefail
+
+SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LIB="$SKILL_DIR/scripts/grounding-cache.sh"
+# shellcheck source=/dev/null
+source "$LIB"
+
+SKIPPED_LOG="${CURLING_RESEARCH_CACHE_DIR:-$HOME/.cache/curling-research}/skipped-grounding.jsonl"
+
+days=14
+mode="summary"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --days)    days="$2"; shift 2 ;;
+    --by-file) mode="by-file"; shift ;;
+    --by-key)  mode="by-key"; shift ;;
+    --json)    mode="json"; shift ;;
+    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
+    *) echo "unknown flag: $1" >&2; exit 2 ;;
+  esac
+done
+
+if [[ ! -s "$SKIPPED_LOG" ]]; then
+  if [[ "$mode" == "json" ]]; then
+    printf '{"window_days":%s,"total":0,"entries":[]}\n' "$days"
+  else
+    echo "no skips logged in last $days days"
+    echo "  log: $SKIPPED_LOG"
+  fi
+  exit 0
+fi
+
+# Cutoff timestamp (epoch).
+now_epoch=$(date -u +%s)
+cutoff_epoch=$((now_epoch - days * 86400))
+if cutoff_iso=$(date -u -r "$cutoff_epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null); then :;
+elif cutoff_iso=$(date -u -d "@$cutoff_epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null); then :;
+else cutoff_iso="1970-01-01T00:00:00Z"
+fi
+
+filtered=$(jq -c --arg cutoff "$cutoff_iso" 'select(.ts > $cutoff)' "$SKIPPED_LOG" 2>/dev/null || true)
+
+if [[ -z "$filtered" ]]; then
+  if [[ "$mode" == "json" ]]; then
+    printf '{"window_days":%s,"total":0,"entries":[]}\n' "$days"
+  else
+    echo "no skips logged in last $days days"
+  fi
+  exit 0
+fi
+
+total=$(printf '%s\n' "$filtered" | grep -c . || true)
+
+case "$mode" in
+  json)
+    printf '%s\n' "$filtered" | jq -s --argjson days "$days" '
+      {window_days:$days, total:length, entries:.}
+    '
+    ;;
+  by-file)
+    echo "Grounding skips — last $days days, by file:"
+    printf '%s\n' "$filtered" | jq -r '.files[]' | sort | uniq -c | sort -rn | \
+      awk '{printf "  %4d  %s\n", $1, $2}'
+    ;;
+  by-key)
+    echo "Grounding skips — last $days days, by suggestion key:"
+    printf '%s\n' "$filtered" | jq -r '.suggestion_keys[]' | sort | uniq -c | sort -rn | \
+      awk '{printf "  %4d  %s\n", $1, substr($0, index($0,$2))}'
+    ;;
+  summary)
+    echo "Grounding skips — last $days days:"
+    echo "  total skips:       $total commit(s)"
+
+    most_file=$(printf '%s\n' "$filtered" | jq -r '.files[]' | sort | uniq -c | sort -rn | head -n1 | awk '{$1=$1; print}')
+    if [[ -n "$most_file" ]]; then
+      mf_count=$(printf '%s' "$most_file" | awk '{print $1}')
+      mf_name=$(printf '%s' "$most_file" | awk '{$1=""; sub(/^ /, ""); print}')
+      echo "  most-skipped file: $mf_name ($mf_count commits)"
+    fi
+
+    most_key=$(printf '%s\n' "$filtered" | jq -r '.suggestion_keys[]' | sort | uniq -c | sort -rn | head -n1 | awk '{$1=$1; print}')
+    if [[ -n "$most_key" ]]; then
+      mk_count=$(printf '%s' "$most_key" | awk '{print $1}')
+      mk_name=$(printf '%s' "$most_key" | awk '{$1=""; sub(/^ /, ""); print}')
+      # Extract just the symbol (after last ':') for readability.
+      mk_short="${mk_name##*:}"
+      echo "  most-skipped key:  $mk_short ($mk_count commits)"
+    fi
+
+    echo "  branches:"
+    printf '%s\n' "$filtered" | jq -r '.branch' | sort | uniq -c | sort -rn | \
+      awk '{printf "    %-20s %d skip(s)\n", substr($0, index($0,$2)), $1}'
+
+    echo ""
+    echo "  recent commits with skipped grounding:"
+    printf '%s\n' "$filtered" | jq -r '
+      [.ts, (.head_at_skip[0:7] // "unknown"), ((.suggestion_keys // []) | join(","))]
+      | @tsv
+    ' | sort -r | head -n 8 | \
+      awk -F'\t' '{printf "    %s  %s  %s\n", $2, $1, $3}'
+
+    echo ""
+    echo "  recommended: scripts/grounding-flush -y to retroactively ground these"
+    ;;
+esac

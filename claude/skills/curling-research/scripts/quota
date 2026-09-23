@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# quota — show today's NotebookLM query usage from the local query log.
+#
+# Usage:
+#   quota                      # today (UTC) usage summary
+#   quota --week               # trailing 7-day rolling view
+#   quota --reset-warning      # silence threshold warnings for the rest of today
+#   quota -h | --help          # this help
+#
+# Reads ~/.cache/curling-research/queries.jsonl (one JSON record per query).
+# Free-tier cap is 50 chat queries/day account-wide; we count rows whose `ts`
+# starts with today's UTC date. `coordinator` rows are tagged `script=coordinator`
+# and represent fan-out launches; the per-child `ask --json` calls are also
+# logged separately as `script=ask`. To avoid double-counting, the totals
+# below count only `script=ask` rows (those are the actual NotebookLM hits);
+# coordinator rows are surfaced separately as fan-out shape metadata.
+
+set -euo pipefail
+
+QUOTA_LOG="${CURLING_RESEARCH_QUOTA_LOG:-$HOME/.cache/curling-research/queries.jsonl}"
+QUOTA_DIR="$(dirname "$QUOTA_LOG")"
+QUOTA_DAILY_CAP=50
+
+mode="today"
+case "${1:-}" in
+  -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
+  --week) mode="week" ;;
+  --reset-warning)
+    mkdir -p "$QUOTA_DIR"
+    today=$(date -u +%Y-%m-%d)
+    sentinel="$QUOTA_DIR/warning-acknowledged-$today"
+    : > "$sentinel"
+    echo "warnings silenced for $today (touch sentinel: $sentinel)"
+    exit 0 ;;
+  "") ;;
+  *) echo "unknown flag: $1" >&2; exit 2 ;;
+esac
+
+# Empty / missing log → friendly nothing-to-report.
+if [[ ! -s "$QUOTA_LOG" ]]; then
+  echo "NotebookLM query quota — today (UTC):"
+  echo "  no queries today (log: $QUOTA_LOG)"
+  echo "  cap: $QUOTA_DAILY_CAP/day (account-wide free tier)"
+  exit 0
+fi
+
+today=$(date -u +%Y-%m-%d)
+
+if [[ "$mode" == "week" ]]; then
+  echo "NotebookLM query quota — last 7 days (UTC):"
+  # Build cutoff = today - 6 days as ISO date.
+  if cutoff=$(date -u -v-6d +%Y-%m-%d 2>/dev/null); then
+    :
+  else
+    # GNU coreutils fallback (not strictly needed on macOS; safe noop).
+    cutoff=$(date -u -d "6 days ago" +%Y-%m-%d 2>/dev/null || echo "$today")
+  fi
+  jq -rs --arg cutoff "$cutoff" --arg today "$today" '
+    map(select(.script == "ask" and (.ts[0:10] >= $cutoff)))
+    | (group_by(.ts[0:10])
+       | map({day: .[0].ts[0:10], n: length})
+       | sort_by(.day)) as $by_day
+    | "  by day:",
+      ( $by_day[] | "    \(.day): \(.n)" ),
+      "",
+      "  total (last 7 days): \([$by_day[].n] | add // 0) queries"
+  ' "$QUOTA_LOG"
+  exit 0
+fi
+
+# Today's view: aggregate ask rows + coordinator rows, group by slug.
+jq -rs --arg today "$today" --argjson cap "$QUOTA_DAILY_CAP" '
+  . as $all
+  | ($all | map(select(.script == "ask"         and .ts[0:10] == $today))) as $asks
+  | ($all | map(select(.script == "coordinator" and .ts[0:10] == $today))) as $coords
+  | ($asks | length) as $ask_count
+  | ($coords | group_by(.contextId // "anon") | length) as $coord_runs
+  | ($coords | length) as $coord_children
+  # Hourly rate over last 6h: queries within last 21600s of "now".
+  | (now | strftime("%Y-%m-%dT%H:%M:%SZ")) as $now_iso
+  | ([ $asks[]
+       | (.ts | sub("\\.[0-9]+"; "") | strptime("%Y-%m-%dT%H:%M:%SZ") | mktime) as $t
+       | select((now - $t) <= 21600) ] | length) as $last_6h
+  | (if $last_6h > 0 then ($last_6h / 6.0) else 0 end) as $rate_per_hr
+  | ($asks | group_by(.slug // "?")
+           | map({slug: .[0].slug, n: length})
+           | sort_by(-.n)) as $by_slug
+  | "NotebookLM query quota — today (UTC):",
+    "  asks:        \($ask_count) queries (avg \($rate_per_hr | tostring | .[0:4])/hour over last 6h)",
+    "  coordinators: \($coord_runs) fan-outs (totaling \($coord_children) queries)",
+    "  total:       \($ask_count)/\($cap) used  (\(($cap - $ask_count) | tostring) remaining; resets at 00:00 UTC)",
+    (if ($by_slug | length) > 0 then "  by notebook:" else empty end),
+    ( $by_slug[] | "    \(.slug): \(.n)" )
+' "$QUOTA_LOG"

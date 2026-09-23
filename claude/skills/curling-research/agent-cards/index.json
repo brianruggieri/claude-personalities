@@ -1,0 +1,141 @@
+{
+  "format": "curling-research-local-manifest-v1",
+  "registryVersion": "1.0.0",
+  "library": "curling-research",
+  "description": "12-notebook curling research library, surfaced as A2A-shaped specialist cards over a local script transport. This is a bespoke local manifest — NOT a generic A2A registry document. Promote to remote A2A by wrapping the scripts behind FastAPI.",
+  "coordinator": "coordinator",
+  "agents": [
+    {
+      "slug": "01-rules",
+      "name": "Curling Rules & Competition Structure",
+      "tags": ["rules", "rulebook", "fgz", "five-rock", "hammer", "hog-line", "burned-stones", "mixed-doubles", "wheelchair", "time-controls", "bonspiel", "brier", "scotties", "officiating"],
+      "skills": [
+        {"id": "lookup-rule", "name": "Look up a rule", "examples": ["What counts as a hog-line violation under World Curling 2024?", "Mixed doubles power-play eligibility?"]},
+        {"id": "rule-impact", "name": "Rule-change impact", "examples": ["What did the five-rock rule do to guard frequency?"]},
+        {"id": "format-spec", "name": "Competition format", "examples": ["Page playoff structure at the Brier"]}
+      ],
+      "notebookFile": "notebooks/01-rules.md"
+    },
+    {
+      "slug": "02-physics",
+      "name": "Curling Physics",
+      "tags": ["friction", "stribeck", "scratch-guidance", "curl-mechanism", "shegelski", "nyberg", "penner", "murata", "honkanen", "deceleration", "collision", "kim-2024", "running-band", "instrumented-stone"],
+      "skills": [
+        {"id": "friction-model", "name": "Friction model lookup", "examples": ["Stribeck regime parameters for pebbled curling ice"]},
+        {"id": "curl-mechanism", "name": "Curl mechanism theory", "examples": ["Scratch-guidance vs asymmetric-melt: current state of debate?"]},
+        {"id": "collision-impulse", "name": "Stone-on-stone collision", "examples": ["Restitution coefficient for granite-on-granite at curling speeds"]}
+      ],
+      "notebookFile": "notebooks/02-physics.md"
+    },
+    {
+      "slug": "03-sweeping",
+      "name": "Sweeping Science",
+      "tags": ["sweeping", "broom", "broomgate", "brush-head", "biomechanics", "stamina", "vo2", "calls", "balanceplus", "sweep-effect", "directional-fabric", "2016-directive", "2026-policy"],
+      "skills": [
+        {"id": "sweep-effect", "name": "Quantify sweeping effect", "examples": ["Distance gain and curl reduction from a single sweeper at peel weight"]},
+        {"id": "broom-regs", "name": "Broom regulation history", "examples": ["What did the 2016 Broomgate directive ban?"]},
+        {"id": "sweeper-fatigue", "name": "Sweeper physiology", "examples": ["VO2 demand of a 10-end game on the sweeper"]}
+      ],
+      "notebookFile": "notebooks/03-sweeping.md"
+    },
+    {
+      "slug": "04-shot-taxonomy",
+      "name": "Shot Taxonomy",
+      "tags": ["draw", "guard", "freeze", "tap-back", "raise", "hit", "hit-and-roll", "peel", "double-takeout", "runback", "come-around", "split", "tick", "in-off", "weight", "handle", "in-turn", "out-turn"],
+      "skills": [
+        {"id": "shot-definition", "name": "Define a named shot", "examples": ["Difference between a tap-back and a freeze"]},
+        {"id": "weight-conventions", "name": "Weight terminology", "examples": ["What hog-to-hog time is 'normal takeout'?"]},
+        {"id": "handle-mechanics", "name": "Handle conventions", "examples": ["RH out-turn vs LH in-turn for a corner-guard come-around"]}
+      ],
+      "notebookFile": "notebooks/04-shot-taxonomy.md"
+    },
+    {
+      "slug": "05-strategy-analytics",
+      "name": "Strategy & Analytics",
+      "tags": ["expected-points", "win-probability", "force-rate", "steal-rate", "blank-rate", "hammer-strategy", "five-rock-rule", "scoreboard-management", "willoughby", "kostuk", "brenzel", "doubletakeout", "mixed-doubles-strategy"],
+      "skills": [
+        {"id": "shot-recommend", "name": "Recommend a shot", "examples": ["Down two without hammer, end 7, opponent has frozen guard — best shot family?"]},
+        {"id": "ep-lookup", "name": "Expected-points lookup", "examples": ["EP of a deuce vs a forced one in end 9"]},
+        {"id": "wp-curve", "name": "Win-probability curve", "examples": ["Steal rate after 5-rock rule introduction"]}
+      ],
+      "notebookFile": "notebooks/05-strategy-analytics.md"
+    },
+    {
+      "slug": "06-player-roles",
+      "name": "Player Roles & Team Dynamics",
+      "tags": ["lead", "second", "third", "vice-skip", "skip", "coach", "team-chemistry", "communication", "skip-throws-third", "single-sweeper", "wheelchair-team", "mixed-doubles-rotation", "archetypes"],
+      "skills": [
+        {"id": "role-load", "name": "Role-specific shot load", "examples": ["Lead vs second sweeping load over a 10-end game"]},
+        {"id": "communication", "name": "Sweeper-skip vocabulary", "examples": ["Numeric weight scale 1–11 conventions"]},
+        {"id": "archetype", "name": "Player archetype", "examples": ["Tactical-skip vs technical-skip behavioral signature"]}
+      ],
+      "notebookFile": "notebooks/06-player-roles.md"
+    },
+    {
+      "slug": "07-equipment",
+      "name": "Equipment",
+      "tags": ["stones", "ailsa-craig", "trefor", "kays", "granite", "running-band", "broom", "balanceplus", "goldline", "hardline", "slider", "gripper", "stabilizer", "pebbler", "nipper", "delivery-stick"],
+      "skills": [
+        {"id": "stone-spec", "name": "Stone material spec", "examples": ["Difference between blue hone and common green Ailsa Craig"]},
+        {"id": "broom-catalog", "name": "Approved broom heads", "examples": ["Currently approved fabric heads under WCF 2026 list"]},
+        {"id": "slider-tribology", "name": "Slider materials", "examples": ["Teflon vs red brick coefficient on tournament ice"]}
+      ],
+      "notebookFile": "notebooks/07-equipment.md"
+    },
+    {
+      "slug": "08-ice-technician",
+      "name": "Ice Technician — Pebble, Prep, and Reading",
+      "tags": ["pebble", "nipping", "scraping", "ice-prep", "ice-reading", "path-memory", "frost", "humidity", "championship-ice", "club-ice", "wuthrich", "callan", "merklinger", "bourassa", "shorty-jenkins"],
+      "skills": [
+        {"id": "pebble-protocol", "name": "Pebbling protocol", "examples": ["Two-pass nozzle convention for championship ice"]},
+        {"id": "ice-reading", "name": "Ice reading", "examples": ["What does '24-second ice with 5 feet of curl' mean?"]},
+        {"id": "club-vs-champ", "name": "Club vs championship delta", "examples": ["Variance budget for club-ice draw weight"]}
+      ],
+      "notebookFile": "notebooks/08-ice-technician.md"
+    },
+    {
+      "slug": "09-broadcast",
+      "name": "Broadcast Presentation",
+      "tags": ["camera", "overhead-house", "telestration", "score-bug", "miced-team", "commentary", "rauter", "harris", "obs", "cbc", "tsn", "nbc", "slow-motion", "graphics"],
+      "skills": [
+        {"id": "camera-rig", "name": "Standard camera rig", "examples": ["What angles does the standard 3-camera rig cover?"]},
+        {"id": "score-bug", "name": "Score-bug anatomy", "examples": ["What fields does a TSN/CBC score-bug expose?"]},
+        {"id": "commentary-register", "name": "Commentary register", "examples": ["Vic Rauter / Mike Harris call structure"]}
+      ],
+      "notebookFile": "notebooks/09-broadcast.md"
+    },
+    {
+      "slug": "10-culture-history",
+      "name": "Culture & History",
+      "tags": ["origins", "stirling", "kilsyth", "rccc", "1838", "olympic", "schmirler", "gushue", "edin", "etiquette", "spirit-of-curling", "broomstacking", "bonspiel-culture", "etymology"],
+      "skills": [
+        {"id": "origin-lookup", "name": "Origin/lore lookup", "examples": ["Etymology of 'hog line'"]},
+        {"id": "famous-moment", "name": "Famous moment", "examples": ["Schmirler 1998 Olympic gold context for narration"]},
+        {"id": "etiquette", "name": "Etiquette/sportsmanship", "examples": ["What is broomstacking and when does it happen?"]}
+      ],
+      "notebookFile": "notebooks/10-culture-history.md"
+    },
+    {
+      "slug": "11-game-design",
+      "name": "Game Design — Curling Video Games & Sports-Sim Patterns",
+      "tags": ["curling-games", "take-out-weight", "curling-2010", "wii-curling", "control-scheme", "swing-meter", "timing-window", "arcade-vs-sim", "tutorial", "replay", "sandbox"],
+      "skills": [
+        {"id": "prior-art", "name": "Prior-art curling game", "examples": ["What did Curling 2010 do well or poorly?"]},
+        {"id": "control-pattern", "name": "Control scheme pattern", "examples": ["3-click swing meter applicability to curling delivery"]},
+        {"id": "tutorial-design", "name": "Tutorial pattern", "examples": ["Onboarding pattern from Wii Bowling for curling weight control"]}
+      ],
+      "notebookFile": "notebooks/11-game-design.md"
+    },
+    {
+      "slug": "12-ai-opponent-design",
+      "name": "AI Opponent Design",
+      "tags": ["mcts", "kr-uct", "digital-curling", "alphacurling", "deep-rl", "shot-selection", "board-evaluation", "difficulty-calibration", "opponent-modeling", "continuous-action", "yamamoto", "lee", "uofa-games"],
+      "skills": [
+        {"id": "search-algorithm", "name": "Search algorithm choice", "examples": ["KR-UCT vs progressive-widening for continuous-action curling"]},
+        {"id": "difficulty-noise", "name": "Difficulty noise model", "examples": ["Aim/weight noise distributions for Easy/Medium/Hard"]},
+        {"id": "opponent-archetype", "name": "Opponent archetype", "examples": ["Conservative-takeout-heavy archetype heuristics"]}
+      ],
+      "notebookFile": "notebooks/12-ai-opponent-design.md"
+    }
+  ]
+}

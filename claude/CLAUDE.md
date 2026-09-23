@@ -51,22 +51,27 @@ If no versions are installed, prompt me before installing one.
 
 If uncertain about intent, scope, or the right approach — ask before acting. For destructive or hard-to-reverse actions (deleting files, force-pushing, dropping data, modifying CI/CD), always confirm first regardless of confidence.
 
-## Orchestration Guide
+## Orchestration Guide (updated 2026-07-04 from Feb–Jul 2026 corpus review)
 
-Three mechanisms are available for multi-step and parallel work. Choose based on scope, duration, and verification needs.
+**Default pipeline (BKM) for a bounded feature:** workspace per feature (Orca workspace `~/orca/workspaces/<repo>/<feature>`, or worktree for programmatic parallelism) → `/brainstorm` + `/write-plan` → codex review loop on spec/plan until green → subagent-driven development (fresh implementer + reviewer per task) → cross-model review on the final PR (codex + security) → human merge. Do not invent a new orchestration shape per project — pick from the menu below. Never rebuild an orchestration framework from scratch; check the stalled-projects ledger in memory for a resume point first.
 
 | Mechanism | Use When | Avoid When |
 |-----------|----------|------------|
-| **Task agents** (`subagent_type` in Agent tool) | 3+ independent parallel subtasks within current session; research, exploration, or delegated implementation | Simple single-path tasks; when context sharing would require complex handoffs |
-| **Agent Teams** (native, experimental) | Multi-agent coordination across separate sessions; parallel feature work with shared task list and messaging | Simple tasks completable in one focused session |
-| **ralph-loop** (`/ralph-loop`) | Well-defined autonomous task that can run unattended; success is objectively verifiable (tests pass, linter clean, file exists); overnight generation tasks | Tasks requiring judgment calls mid-run; no clear pass/fail exit criteria |
-| **Superpowers skills** (`/brainstorm`, `/write-plan`, `/execute-plan`) | Structured SDLC cycles: idea refinement → plan → parallel implementation → review; new feature work where quality matters | Quick ad-hoc changes; fixes where the path is already clear |
+| **Task agents** (Agent tool, in-session) | 3+ independent subtasks; research/review fan-out; the default for delegated implementation | Flat fan-out without dependency analysis (run /tiered-fanout first) |
+| **Agent Teams** (native) | Greenfield build from a locked spec with a blockedBy task graph (validated 2x) | Iterative/grind work or long background jobs — use serial subagents with orchestrator-owned gate instead |
+| **Tiered epic fan-out** (`/tiered-fanout`) | Multi-issue epics, cleanup passes, 3+ parallel plans | Never a flat N-way run — shared contracts serialize |
+| **Handoff docs** (`/handoff`) | Continuing multi-session work where the plan leaves decisions open (A/B-measured 41-70% token win) | Fully prescriptive plans — measured +27% pure overhead; launch with the plan alone |
+| **ralph-loop / unattended** | Mechanically verifiable completion ONLY (tests, pixel-diff threshold, promise token — never vision scores); run preflight first: pinned model, fresh auth (`claude setup-token` → CLAUDE_CODE_OAUTH_TOKEN), pre-authorized permissions, disk-first outputs, one CPU-heavy job at a time | Subjective exit criteria; anything unpreflighted |
+| **Superpowers skills** | Structured SDLC for new feature work | Quick ad-hoc changes |
 
-**Decision shortcut:**
-- Need results in this session, tasks are parallel → Task agents
-- Multi-session coordination with shared state → Agent Teams
-- Well-defined task, can verify success automatically, can run overnight → ralph-loop
-- Starting a significant new feature from scratch → Superpowers skills
+**Hard rules (each cost a recovery session):**
+- Before dispatching parallel agents, map shared function signatures/contracts/CSS surfaces — anything shared serializes or gets a lead-owned foundation commit first. Green-in-isolation ≠ compatible-when-merged.
+- Orchestrator owns completion: poll and resume workers (Monitor/SendMessage); never trust self-resume of background jobs.
+- Every subagent writes its deliverable to disk before returning (rate limits lose summaries, never files).
+- Every non-trivial PR gets at least one different-model-family review; same-family reviewers anchor on the author's framing. All LLM grading uses a written rubric with binary per-criterion verdicts — never 1-10 scores.
+- Model tiers: mechanical loops = haiku/sonnet; judgment (plan/integration review, brainstorms) = opus; second opinion = codex; unattended agents = pinned opus.
+
+**Deprecated patterns — do not resurrect from old handoff docs/memories:** hook-enforced team choreography (Formation — zero measured quality gain), worktree symlink hooks (tracked `.claude/` + native worktree config won), claude-flow, manual polling loops (native Monitor covers it), Sculptor workspaces (dropped for Forgejo pipeline + Orca).
 
 ## Skills Reference
 
@@ -90,6 +95,11 @@ Invoke these explicitly when the use case matches. Most are not auto-triggered.
 | `/ship` (gstack) | Pre-merge checklist: tests, lint, type-check, changelog |
 | `/review` (gstack) | Code review with structured feedback |
 | `/retro` (gstack) | Post-task retrospective |
+| `/tiered-fanout` | Before dispatching 3+ parallel subagents/worktrees — dependency analysis + tier classification |
+| `/ab-experiment` | Measuring whether a workflow/prompt/skill change actually helps — paired worktrees, blind grading |
+| `/session-archaeology` | Any "check your claude logs" / retrospective / what-have-I-done question |
+| `/honest-assessment` | After agent-heavy sprints or before reporting metrics — field-validated vs mock-derived audit |
+| `/headless-claude-hygiene` | Before any batch/pipeline/test that shells out to `claude -p` |
 
 **context7** is auto-invoked for library documentation lookups. Explicitly request it when working with unfamiliar APIs or when docs may be outdated.
 
@@ -113,6 +123,8 @@ Worktrees isolate feature work from the main checkout. Follow these rules consis
 
 **The primary checkout (repo root) stays on the active feature branch.** Do not switch the root checkout to main or another branch mid-session.
 
+**`.claude/` in worktrees:** Each worktree gets its own `.claude/` directory checked out from git — do NOT symlink it back to the primary checkout. `.claude/` is fully tracked in private repos; skills, hooks, and plans committed on a feature branch are part of that branch and get reviewed in the PR like any other file. The old symlink convention caused `git diff` to break with "beyond a symbolic link" errors and required plumbing workarounds.
+
 **Cleanup after merge — always do all three steps:**
 ```bash
 git worktree remove .worktrees/<name>
@@ -129,7 +141,7 @@ git worktree list && git branch --merged main
 
 ## Claude Plans and Documentation
 
-Keep all agent-facing docs, plans, and checklists in the project's `.claude/` directory (e.g. `~/git/myproject/.claude/`), not in the repo root. This keeps them out of git and out of the way of source files.
+Keep all agent-facing docs, plans, and checklists in the project's `.claude/` directory (e.g. `~/git/myproject/.claude/`). For private repos `.claude/` is fully tracked in git — commit skills, hooks, plans, and specs alongside the code that uses them. Only `settings.local.json` and `run-logs/` stay untracked (machine-local auth and ephemeral session output).
 
 When executing a plan from a `.claude/` document, re-read referenced source files fresh — do not rely on file content read earlier in the session. The plan is the source of truth; discard exploration-phase assumptions not captured in it.
 
@@ -157,3 +169,8 @@ Use `git` directly for all git operations (push, pull, fetch, etc.). Do not use 
 - Never commit `.env` files, API keys, or secrets
 - Never push to main/master without asking
 - Never install global npm packages without asking
+- Never mutate state on repos Brian doesn't own — labels, PR metadata, bot commands, check reruns; comments and fork pushes only
+- Never default a pipeline/tool to shelling out to `claude -p` — gate behind a flag, stub the binary in tests, scratch cwd + `--no-session-persistence` for batches (see /headless-claude-hygiene)
+# graphify
+- **graphify** (`~/.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
+When the user types `/graphify`, invoke the Skill tool with `skill: "graphify"` before doing anything else.

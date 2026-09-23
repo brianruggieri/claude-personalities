@@ -1,0 +1,446 @@
+#!/usr/bin/env bash
+# memory-validate — TTL-based revalidation for memory entries that cite research.
+#
+# Memory files at ~/.claude/projects/<encoded>/memory/*.md may declare:
+#
+#   ---
+#   cites_research:
+#     - recipe: justify-physics-constant
+#       args: "curl_coefficient 0.048"
+#       ttl_days: 90
+#       last_validated: "2026-04-27T13:16:09Z"
+#       answer_summary: "..."
+#   ---
+#
+# This script lists, checks (no writes), or refreshes (--apply) those
+# citations against the current recipe answers.
+#
+# Usage:
+#   memory-validate                       # list status, no queries
+#   memory-validate --check <memfile>     # run expired citations, report drift
+#   memory-validate --apply <memfile>     # run + write timestamps back
+#   memory-validate --apply-all           # iterate all expired
+#   memory-validate --json                # machine-readable status
+
+set -euo pipefail
+
+SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LIB="$SKILL_DIR/scripts/grounding-cache.sh"
+RECIPES_DIR="$SKILL_DIR/scripts/recipes"
+# shellcheck source=/dev/null
+source "$LIB"
+
+QUOTA_LOG="${CURLING_RESEARCH_QUOTA_LOG:-$HOME/.cache/curling-research/queries.jsonl}"
+QUOTA_DAILY_CAP="${CURLING_RESEARCH_QUOTA_CAP:-50}"
+SIM_THRESHOLD="${MEMORY_VALIDATE_SIM_THRESHOLD:-0.85}"
+
+# Compute the per-project memory dir from the current repo path.
+resolve_memory_dir() {
+  local repo_root
+  repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || return 1
+  local encoded
+  encoded=$(printf '%s' "$repo_root" | sed 's|/|-|g')
+  printf '%s' "$HOME/.claude/projects/$encoded/memory"
+}
+
+MEMORY_DIR="$(resolve_memory_dir)" || { echo "error: not in a git repo" >&2; exit 1; }
+[[ -d "$MEMORY_DIR" ]] || { echo "error: memory dir not found: $MEMORY_DIR" >&2; exit 1; }
+
+# ---------- frontmatter parsing (no pyyaml) ----------
+# Outputs the JSON of a memory file's `cites_research` array, or empty.
+extract_citations_json() {
+  local memfile="$1"
+  python3 - "$memfile" <<'PY'
+import sys, re, json
+path = sys.argv[1]
+with open(path, "r") as f:
+    src = f.read()
+m = re.match(r'^---\n(.*?)\n---', src, re.DOTALL)
+if not m:
+    print("[]")
+    sys.exit(0)
+fm = m.group(1)
+# Locate `cites_research:` block.
+cm = re.search(r'^cites_research:\s*\n((?:[ \t]+-.*(?:\n[ \t]+[^-\s].*)*\n?)+)', fm, re.MULTILINE)
+if not cm:
+    print("[]")
+    sys.exit(0)
+block = cm.group(1)
+# Split into entries by leading "- " at start of indented line.
+entries = []
+current = None
+for line in block.splitlines():
+    stripped = line.lstrip()
+    if stripped.startswith("- "):
+        if current is not None:
+            entries.append(current)
+        current = {}
+        # parse first key on this line
+        rest = stripped[2:]
+        if ":" in rest:
+            k, _, v = rest.partition(":")
+            current[k.strip()] = v.strip().strip('"')
+    elif current is not None and ":" in stripped:
+        k, _, v = stripped.partition(":")
+        current[k.strip()] = v.strip().strip('"')
+if current is not None:
+    entries.append(current)
+# Coerce ttl_days to int if possible.
+for e in entries:
+    if "ttl_days" in e:
+        try:
+            e["ttl_days"] = int(e["ttl_days"])
+        except ValueError:
+            pass
+print(json.dumps(entries))
+PY
+}
+
+# Atomically rewrite a memory file with new citation timestamps + summaries.
+# Args: memfile, JSON-array-of-updates where each update is
+#   {"recipe": ..., "args": ..., "last_validated": ..., "answer_summary": ...}
+update_memory_frontmatter() {
+  local memfile="$1"
+  local updates_json="$2"
+  python3 - "$memfile" "$updates_json" <<'PY'
+import sys, re, json, os
+path = sys.argv[1]
+updates = json.loads(sys.argv[2])
+# Index by (recipe, args).
+upd_map = {(u["recipe"], u["args"]): u for u in updates}
+with open(path, "r") as f:
+    src = f.read()
+m = re.match(r'^(---\n)(.*?)(\n---)', src, re.DOTALL)
+if not m:
+    sys.stderr.write(f"no frontmatter in {path}\n")
+    sys.exit(1)
+prefix, fm, suffix = m.group(1), m.group(2), m.group(3)
+
+# Walk frontmatter line-by-line, mutating last_validated/answer_summary
+# inside the current matched block.
+out_lines = []
+in_cites = False
+current_recipe = None
+current_args = None
+for line in fm.splitlines():
+    stripped = line.lstrip()
+    if re.match(r'^cites_research:\s*$', line):
+        in_cites = True
+        out_lines.append(line)
+        continue
+    if in_cites:
+        # Detect end of cites block: a top-level key (no leading whitespace) ends it.
+        if line and not line.startswith(" ") and not line.startswith("\t") and not line.startswith("-"):
+            in_cites = False
+            current_recipe = None
+            current_args = None
+            out_lines.append(line)
+            continue
+        if stripped.startswith("- "):
+            # New citation entry — flush keys.
+            current_recipe = None
+            current_args = None
+            rest = stripped[2:]
+            if ":" in rest:
+                k, _, v = rest.partition(":")
+                key = k.strip()
+                val = v.strip().strip('"')
+                if key == "recipe":
+                    current_recipe = val
+                elif key == "args":
+                    current_args = val
+            out_lines.append(line)
+            continue
+        # Continuation key.
+        if ":" in stripped:
+            k, _, v = stripped.partition(":")
+            key = k.strip()
+            val = v.strip().strip('"')
+            if key == "recipe":
+                current_recipe = val
+            elif key == "args":
+                current_args = val
+            if current_recipe is not None and current_args is not None:
+                upd = upd_map.get((current_recipe, current_args))
+                if upd is not None:
+                    if key == "last_validated":
+                        indent = line[:len(line) - len(stripped)]
+                        out_lines.append(f'{indent}last_validated: "{upd["last_validated"]}"')
+                        continue
+                    if key == "answer_summary":
+                        indent = line[:len(line) - len(stripped)]
+                        # Escape inner double quotes.
+                        safe = upd["answer_summary"].replace('\\', '\\\\').replace('"', '\\"')
+                        out_lines.append(f'{indent}answer_summary: "{safe}"')
+                        continue
+        out_lines.append(line)
+    else:
+        out_lines.append(line)
+
+new_fm = "\n".join(out_lines)
+new_src = prefix + new_fm + suffix + src[m.end():]
+
+# Atomic write.
+tmp = path + ".tmp"
+with open(tmp, "w") as f:
+    f.write(new_src)
+os.rename(tmp, path)
+PY
+}
+
+# Token-set Jaccard similarity between two strings, in [0,1].
+similarity() {
+  local a="$1" b="$2"
+  python3 - "$a" "$b" <<'PY'
+import sys, re
+a = re.findall(r"[A-Za-z0-9_]+", sys.argv[1].lower())
+b = re.findall(r"[A-Za-z0-9_]+", sys.argv[2].lower())
+sa, sb = set(a), set(b)
+if not sa and not sb:
+    print("1.000")
+    sys.exit(0)
+inter = sa & sb
+union = sa | sb
+print(f"{len(inter)/len(union):.3f}" if union else "0.000")
+PY
+}
+
+# Run a single citation through its recipe; echo "<last_validated>\t<answer_summary>"
+run_citation() {
+  local recipe="$1" args="$2"
+  local recipe_path="$RECIPES_DIR/$recipe.sh"
+  if [[ ! -x "$recipe_path" ]]; then
+    return 1
+  fi
+  local out
+  # shellcheck disable=SC2086
+  out=$("$recipe_path" $args 2>/dev/null) || return 1
+  # Strip the recipe's header banner. The recipes print a few "──...──" lines
+  # plus header, then the cached/fresh answer. Take everything after the
+  # second separator line as the answer.
+  local body
+  body=$(printf '%s\n' "$out" | awk '
+    BEGIN { sep = 0 }
+    /^─+$/ { sep++; next }
+    sep >= 2 { print }
+  ')
+  [[ -z "$body" ]] && body="$out"
+  local summary
+  summary=$(printf '%s' "$body" | tr '\n' ' ' | sed 's/  */ /g' | cut -c1-400)
+  local ts
+  ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  printf '%s\t%s' "$ts" "$summary"
+}
+
+# Compute citation status: "fresh" | "expired" | "never".
+citation_status() {
+  local last_validated="$1" ttl_days="$2"
+  if [[ -z "$last_validated" || "$last_validated" == "null" ]]; then
+    printf 'never'; return
+  fi
+  local lv_epoch now_epoch age_days
+  lv_epoch=$(_cache_iso_to_epoch "$last_validated")
+  now_epoch=$(_cache_now_epoch)
+  age_days=$(( (now_epoch - lv_epoch) / 86400 ))
+  if [[ "$age_days" -gt "$ttl_days" ]]; then
+    printf 'expired'
+  else
+    printf 'fresh'
+  fi
+}
+
+# ---------- argument parsing ----------
+mode="list"
+target=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --check)     mode="check"; target="${2:-}"; shift 2 ;;
+    --apply)     mode="apply"; target="${2:-}"; shift 2 ;;
+    --apply-all) mode="apply-all"; shift ;;
+    --json)      mode="json"; shift ;;
+    -h|--help)   sed -n '2,22p' "$0"; exit 0 ;;
+    *) echo "unknown flag: $1" >&2; exit 2 ;;
+  esac
+done
+
+# ---------- enumerate memory files with citations ----------
+memfiles=()
+while IFS= read -r f; do
+  memfiles+=("$f")
+done < <(grep -l "^cites_research:" "$MEMORY_DIR"/*.md 2>/dev/null || true)
+
+if [[ ${#memfiles[@]} -eq 0 && "$mode" != "json" ]]; then
+  echo "no memory files with cites_research: in $MEMORY_DIR"
+  exit 0
+fi
+
+# ---------- LIST mode ----------
+if [[ "$mode" == "list" || "$mode" == "json" ]]; then
+  if [[ "$mode" == "json" ]]; then
+    json_entries="["
+    first_e=1
+    for mf in "${memfiles[@]}"; do
+      cites=$(extract_citations_json "$mf")
+      [[ "$cites" == "[]" ]] && continue
+      while IFS= read -r c; do
+        [[ -z "$c" ]] && continue
+        recipe=$(printf '%s' "$c" | jq -r '.recipe // ""')
+        args=$(printf '%s' "$c" | jq -r '.args // ""')
+        ttl=$(printf '%s' "$c" | jq -r '.ttl_days // 90')
+        lv=$(printf '%s' "$c" | jq -r '.last_validated // ""')
+        st=$(citation_status "$lv" "$ttl")
+        [[ $first_e -eq 0 ]] && json_entries+=","
+        first_e=0
+        json_entries+=$(jq -cn --arg f "$mf" --arg r "$recipe" --arg a "$args" --arg lv "$lv" --argjson ttl "$ttl" --arg s "$st" '{file:$f, recipe:$r, args:$a, last_validated:$lv, ttl_days:$ttl, status:$s}')
+      done < <(printf '%s' "$cites" | jq -c '.[]')
+    done
+    json_entries+="]"
+    printf '%s\n' "$json_entries" | jq .
+    exit 0
+  fi
+
+  echo "Memory citations — TTL status (memory dir: $MEMORY_DIR)"
+  echo ""
+  for mf in "${memfiles[@]}"; do
+    cites=$(extract_citations_json "$mf")
+    [[ "$cites" == "[]" ]] && continue
+    name=$(basename "$mf")
+    echo "  $name"
+    while IFS= read -r c; do
+      [[ -z "$c" ]] && continue
+      recipe=$(printf '%s' "$c" | jq -r '.recipe // ""')
+      args=$(printf '%s' "$c" | jq -r '.args // ""')
+      ttl=$(printf '%s' "$c" | jq -r '.ttl_days // 90')
+      lv=$(printf '%s' "$c" | jq -r '.last_validated // ""')
+      st=$(citation_status "$lv" "$ttl")
+      case "$st" in
+        fresh)   printf "    [fresh]   %s %s (validated %s, TTL %sd)\n" "$recipe" "$args" "${lv:0:10}" "$ttl" ;;
+        expired) printf "    [EXPIRED] %s %s (validated %s, TTL %sd)\n" "$recipe" "$args" "${lv:0:10}" "$ttl" ;;
+        never)   printf "    [never]   %s %s (TTL %sd)\n" "$recipe" "$args" "$ttl" ;;
+      esac
+    done < <(printf '%s' "$cites" | jq -c '.[]')
+  done
+  exit 0
+fi
+
+# ---------- CHECK / APPLY a single file ----------
+process_file() {
+  local memfile="$1"
+  local write_back="$2"   # 1 to apply, 0 for check-only
+  if [[ ! -f "$memfile" ]]; then
+    echo "error: memory file not found: $memfile" >&2
+    return 1
+  fi
+  local cites
+  cites=$(extract_citations_json "$memfile")
+  if [[ "$cites" == "[]" ]]; then
+    echo "no citations in $(basename "$memfile")"
+    return 0
+  fi
+
+  local updates="[]"
+  local any_drift=0
+
+  while IFS= read -r c; do
+    [[ -z "$c" ]] && continue
+    recipe=$(printf '%s' "$c" | jq -r '.recipe // ""')
+    args=$(printf '%s' "$c" | jq -r '.args // ""')
+    ttl=$(printf '%s' "$c" | jq -r '.ttl_days // 90')
+    lv=$(printf '%s' "$c" | jq -r '.last_validated // ""')
+    stored_summary=$(printf '%s' "$c" | jq -r '.answer_summary // ""')
+    st=$(citation_status "$lv" "$ttl")
+    if [[ "$st" == "fresh" ]]; then
+      echo "  [fresh] $recipe $args (validated ${lv:0:10}, TTL ${ttl}d)"
+      continue
+    fi
+    echo ""
+    echo "  validating: $recipe $args"
+    echo "    status: $st (last validated ${lv:-never}, TTL ${ttl}d)"
+    if ! result=$(run_citation "$recipe" "$args"); then
+      echo "    ERROR: recipe failed — skipping"
+      continue
+    fi
+    new_ts=$(printf '%s' "$result" | cut -f1)
+    new_summary=$(printf '%s' "$result" | cut -f2-)
+
+    if [[ -z "$stored_summary" ]]; then
+      sim="0.000"
+      verdict="initial"
+    else
+      sim=$(similarity "$stored_summary" "$new_summary")
+      # bash 3.2 has no float compare; use awk.
+      if awk "BEGIN { exit !($sim > $SIM_THRESHOLD) }"; then
+        verdict="consistent"
+      else
+        verdict="DRIFT"
+        any_drift=1
+      fi
+    fi
+
+    case "$verdict" in
+      consistent)
+        echo "    consistent (similarity $sim) — re-validating timestamp"
+        ;;
+      initial)
+        echo "    initial validation (no prior summary stored)"
+        ;;
+      DRIFT)
+        echo "    STATUS: DRIFT — answer_summary changed (similarity $sim, threshold $SIM_THRESHOLD)"
+        echo ""
+        echo "    stored:  ${stored_summary:0:200}"
+        echo "    current: ${new_summary:0:200}"
+        echo ""
+        ;;
+    esac
+
+    updates=$(printf '%s' "$updates" | jq \
+      --arg r "$recipe" --arg a "$args" --arg ts "$new_ts" --arg s "$new_summary" \
+      '. + [{recipe:$r, args:$a, last_validated:$ts, answer_summary:$s}]')
+  done < <(printf '%s' "$cites" | jq -c '.[]')
+
+  local update_count
+  update_count=$(printf '%s' "$updates" | jq 'length')
+  if [[ "$write_back" -eq 1 && "$update_count" -gt 0 ]]; then
+    update_memory_frontmatter "$memfile" "$updates"
+    echo ""
+    echo "  applied $update_count update(s) to $(basename "$memfile")"
+  fi
+
+  if [[ "$any_drift" -eq 1 && "$write_back" -ne 1 ]]; then
+    echo ""
+    echo "  recommendation: review $(basename "$memfile") and update the cited value,"
+    echo "  or re-run with --apply to refresh the timestamp + summary."
+  fi
+}
+
+case "$mode" in
+  check)
+    [[ -z "$target" ]] && { echo "usage: --check <memfile>" >&2; exit 2; }
+    echo "memory: $(basename "$target")"
+    process_file "$target" 0
+    ;;
+  apply)
+    [[ -z "$target" ]] && { echo "usage: --apply <memfile>" >&2; exit 2; }
+    echo "memory: $(basename "$target")"
+    process_file "$target" 1
+    ;;
+  apply-all)
+    for mf in "${memfiles[@]}"; do
+      cites=$(extract_citations_json "$mf")
+      [[ "$cites" == "[]" ]] && continue
+      # Skip files with no expired citations.
+      need_run=0
+      while IFS= read -r c; do
+        [[ -z "$c" ]] && continue
+        ttl=$(printf '%s' "$c" | jq -r '.ttl_days // 90')
+        lv=$(printf '%s' "$c" | jq -r '.last_validated // ""')
+        st=$(citation_status "$lv" "$ttl")
+        [[ "$st" != "fresh" ]] && need_run=1
+      done < <(printf '%s' "$cites" | jq -c '.[]')
+      [[ "$need_run" -eq 0 ]] && continue
+      echo ""
+      echo "memory: $(basename "$mf")"
+      process_file "$mf" 1
+    done
+    ;;
+esac
